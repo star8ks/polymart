@@ -196,6 +196,7 @@ async def perform_trade(market):
                 # Get market depth and price information
                 deets = get_best_bid_ask_deets(market, detail['name'], 100, 0.1)
 
+                # NOTE: This looks hacky and risky
                 #if deet has None for one these values below, call it with min size of 20
                 if deets['best_bid'] is None or deets['best_ask'] is None or deets['best_bid_size'] is None or deets['best_ask_size'] is None:
                     deets = get_best_bid_ask_deets(market, detail['name'], 20, 0.1)
