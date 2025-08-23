@@ -28,11 +28,8 @@ def get_all_markets(client):
             markets = client.get_sampling_markets(next_cursor = cursor)
             markets_df = pd.DataFrame(markets['data'])
 
-
             cursor = markets['next_cursor']
             
-
-
             all_markets.append(markets_df)
 
             if cursor is None:
@@ -111,6 +108,66 @@ def add_formula_params(curr_df, midpoint, v, daily_reward):
     curr_df['Q'] = curr_df['S'] * curr_df['size']
     curr_df['reward_per_100'] = (curr_df['Q'] / curr_df['Q'].sum()) * daily_reward / 2 / curr_df['size'] * curr_df['100']
     return curr_df
+
+def calculate_market_depth(bids_df, asks_df, midpoint, s_max):
+    """Calculate depth_yes_in and depth_no_in based on midpoint and s_max"""
+    depth_yes_in = 0
+    depth_no_in = 0
+    
+    # Calculate price ranges
+    price_low_yes = midpoint - s_max
+    price_high_yes = midpoint
+    price_low_no = midpoint
+    price_high_no = midpoint + s_max
+    
+    # Sum yes bids within range [mid - s_max, mid]
+    if not bids_df.empty:
+        filtered_bids = bids_df[(bids_df['price'] >= price_low_yes) & (bids_df['price'] <= price_high_yes)]
+        depth_yes_in = filtered_bids['size'].sum()
+    
+    # Sum no asks within range [mid, mid + s_max]
+    if not asks_df.empty:
+        filtered_asks = asks_df[(asks_df['price'] >= price_low_no) & (asks_df['price'] <= price_high_no)]
+        depth_no_in = filtered_asks['size'].sum()
+    
+    return depth_yes_in, depth_no_in
+
+def calculate_attractiveness_score(rewards_daily_rate, spread, max_spread, tick_size, midpoint, 
+                                 depth_yes_in, depth_no_in, volatility=None, 
+                                 in_game_multiplier=1.0, plan_two_sided=True, alpha=0.1):
+    """Calculate attractiveness score based on market conditions and strategy"""
+    EPS = 1e-6
+    
+    s_max = max_spread / 100.0  # convert cents to price units
+    vol = volatility if volatility is not None else 0.0
+    
+    # Skip non-viable markets
+    if s_max <= tick_size or spread > s_max:
+        return 0.0
+    if midpoint < 0.10 or midpoint > 0.90:
+        return 0.0
+    
+    # 1) How much scoring boost can you capture if you quote inside incentive spread?
+    w_target = max(tick_size, min(s_max - tick_size, spread / 2))
+    boost = ((s_max - w_target) / s_max) ** 2
+    
+    # 2) Two-sided factor (penalty if one-sided while mid in [0.10, 0.90])
+    two_sided_req = (midpoint <= 0.10 or midpoint >= 0.90)
+    two_side_multiplier = 1.0 if (plan_two_sided or two_sided_req) else (1/3.0)
+    
+    # 3) Competition inside the reward zone
+    D = max(EPS, depth_yes_in + depth_no_in)
+    marginal_share_proxy = 1.0 / D
+    
+    # 4) Risk/friction penalty
+    risk_penalty = alpha * vol
+    
+    # Final attractiveness score
+    attractiveness_score = (
+        rewards_daily_rate * in_game_multiplier * boost * two_side_multiplier * marginal_share_proxy
+    ) / (1.0 + risk_penalty)
+    
+    return attractiveness_score
 
 def process_single_row(row, client):
     ret = {}
@@ -206,6 +263,22 @@ def process_single_row(row, client):
 
     ret['sm_reward_per_100'] = round((best_bid_reward + best_ask_reward) / 2, 2)
     ret['gm_reward_per_100'] = round((best_bid_reward * best_ask_reward) ** 0.5, 2)
+
+    # Calculate market depth within reward zone
+    depth_yes_in, depth_no_in = calculate_market_depth(bids, asks, ret['midpoint'], v)
+    ret['depth_yes_in'] = depth_yes_in
+    ret['depth_no_in'] = depth_no_in
+
+    # Calculate attractiveness score
+    ret['attractiveness_score'] = calculate_attractiveness_score(
+        rewards_daily_rate=rate,
+        spread=ret['best_ask'] - ret['best_bid'],
+        max_spread=ret['max_spread'],
+        tick_size=TICK_SIZE,
+        midpoint=ret['midpoint'],
+        depth_yes_in=depth_yes_in,
+        depth_no_in=depth_no_in
+    )
 
     ret['end_date_iso'] = row['end_date_iso']
     ret['market_slug'] = row['market_slug']
@@ -344,7 +417,7 @@ def get_markets(all_results, sel_df, maker_reward=1):
     new_df = new_df.sort_values('rewards_daily_rate', ascending=False)
     new_df[' '] = ''
 
-    new_df = new_df[['question', 'answer1', 'answer2', 'neg_risk', 'spread', 'best_bid', 'best_ask', 'rewards_daily_rate', 'bid_reward_per_100', 'ask_reward_per_100', 'gm_reward_per_100', 'sm_reward_per_100', 'min_size', 'max_spread', 'tick_size', 'market_slug', 'token1', 'token2', 'condition_id']]
+    new_df = new_df[['question', 'answer1', 'answer2', 'neg_risk', 'spread', 'best_bid', 'best_ask', 'rewards_daily_rate', 'bid_reward_per_100', 'ask_reward_per_100', 'gm_reward_per_100', 'sm_reward_per_100', 'min_size', 'max_spread', 'tick_size', 'market_slug', 'token1', 'token2', 'condition_id', 'depth_yes_in', 'depth_no_in', 'attractiveness_score']]
     new_df = new_df.replace([np.inf, -np.inf], 0)
     all_data = new_df.copy()
     s_df = new_df.copy()
