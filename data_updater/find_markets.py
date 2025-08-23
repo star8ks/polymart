@@ -216,9 +216,9 @@ def process_single_row(row, client):
     return ret
 
 
-def get_all_results(all_df, client, max_workers=5):
+def get_all_results(all_df, client, max_workers=3, batch_size=40):
     all_results = []
-
+    
     def process_with_progress(args):
         idx, row = args
         try:
@@ -227,16 +227,26 @@ def get_all_results(all_df, client, max_workers=5):
             print("error fetching market")
             return None
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(process_with_progress, (idx, row)) for idx, row in all_df.iterrows()]
+    # Process in batches to respect rate limits (Book endpoint: 50 requests/10s)
+    for i in range(0, len(all_df), batch_size):
+        batch_df = all_df.iloc[i:i+batch_size]
+        batch_results = []
         
-        for future in concurrent.futures.as_completed(futures):
-            result = future.result()
-            if result is not None:
-                all_results.append(result)
-
-            if len(all_results) % (max_workers * 2) == 0:
-                print(f'{len(all_results)} of {len(all_df)}')
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(process_with_progress, (idx, row)) for idx, row in batch_df.iterrows()]
+            
+            for future in concurrent.futures.as_completed(futures):
+                result = future.result()
+                if result is not None:
+                    batch_results.append(result)
+        
+        all_results.extend(batch_results)
+        print(f'{len(all_results)} of {len(all_df)} markets processed')
+        
+        # Rate limit: sleep for 10 seconds after each batch to respect API limits
+        if i + batch_size < len(all_df):
+            print("Waiting 10 seconds to respect rate limits...")
+            time.sleep(10)
 
     return all_results
 
@@ -290,7 +300,7 @@ def add_volatility(row):
     new_dict = {**row_dict, **stats}
     return new_dict
 
-def add_volatility_to_df(df, max_workers=3):
+def add_volatility_to_df(df, max_workers=2, batch_size=40):
     
     results = []
     df = df.reset_index(drop=True)
@@ -304,16 +314,26 @@ def add_volatility_to_df(df, max_workers=3):
             print("Error fetching volatility")
             return None
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(process_volatility_with_progress, (idx, row)) for idx, row in df.iterrows()]
+    # Process in batches to respect rate limits (Price endpoint: 100 requests/10s)
+    for i in range(0, len(df), batch_size):
+        batch_df = df.iloc[i:i+batch_size]
+        batch_results = []
         
-        for future in concurrent.futures.as_completed(futures):
-            result = future.result()
-            if result is not None:
-                results.append(result)
-                
-            if len(results) % (max_workers * 2) == 0:
-                print(f'{len(results)} of {len(df)}')
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(process_volatility_with_progress, (idx, row)) for idx, row in batch_df.iterrows()]
+            
+            for future in concurrent.futures.as_completed(futures):
+                result = future.result()
+                if result is not None:
+                    batch_results.append(result)
+        
+        results.extend(batch_results)
+        print(f'{len(results)} of {len(df)} volatility calculations completed')
+        
+        # Rate limit: sleep for 10 seconds after each batch to respect API limits
+        if i + batch_size < len(df):
+            print("Waiting 10 seconds to respect rate limits...")
+            time.sleep(10)
             
     return pd.DataFrame(results)
 
