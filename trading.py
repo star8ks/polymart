@@ -350,9 +350,8 @@ async def perform_trade(market):
                 
                 # Only buy if:
                 # 1. Position is less than max_size (new logic)
-                # 2. Position is less than absolute cap (250)
-                # 3. Buy amount is above minimum size
-                if position < max_size and position < 250 and buy_amount > 0 and buy_amount >= row['min_size']:
+                # 2. Buy amount is above minimum size
+                if position < max_size and buy_amount > 0 and buy_amount >= row['min_size']:
                     # Get reference price from market data
                     sheet_value = row['best_bid']
 

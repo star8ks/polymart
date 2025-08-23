@@ -151,7 +151,6 @@ def update_markets():
     if len(received_df) > 0:
         global_state.df, global_state.params = received_df.copy(), received_params
     
-
     for _, row in global_state.df.iterrows():
         for col in ['token1', 'token2']:
             row[col] = str(row[col])
@@ -167,4 +166,4 @@ def update_markets():
 
         for col2 in [f"{row['token1']}_buy", f"{row['token1']}_sell", f"{row['token2']}_buy", f"{row['token2']}_sell"]:
             if col2 not in global_state.performing:
-                global_state.performing[col2] = set()
+                global_state.performing[col2] = set() 
