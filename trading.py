@@ -40,7 +40,7 @@ def send_buy_order(order):
     size_diff = abs(existing_buy_size - order['size']) if existing_buy_size > 0 else float('inf')
     
     should_cancel = (
-        price_diff > 0.005 or  # Cancel if price diff > 0.5 cents
+        price_diff > 0.002 or  # Cancel if price diff > 0.2 cents
         size_diff > order['size'] * 0.1 or  # Cancel if size diff > 10%
         existing_buy_size == 0  # Cancel if no existing buy order
     )
@@ -394,8 +394,8 @@ async def perform_trade(market):
                             rev_token = global_state.REVERSE_TOKENS[str(token)]
                             rev_pos = get_position(rev_token)
 
-                            # If we have significant opposing position, don't buy more
-                            if rev_pos['size'] > row['min_size']:
+                            # If we have significant opposing position, and box sum guard fails, don't buy more
+                            if rev_pos['size'] > row['min_size'] and order['price'] + rev_pos['avgPrice'] >= 0.99:
                                 print("Bypassing creation of new buy order because there is a reverse position")
                                 if orders['buy']['size'] > CONSTANTS.MIN_MERGE_SIZE:
                                     print("Cancelling buy orders because there is a reverse position")
@@ -416,7 +416,7 @@ async def perform_trade(market):
                                           f"Orders look like this: {orders['buy']}. Best Bid: {best_bid}")
                                     send_buy_order(order)
                                 # 2. Current position + orders is not enough to reach max_size
-                                elif position + orders['buy']['size'] < 0.95 * max_size:
+                                elif position + orders['buy']['size'] < max_size:
                                     print(f"Sending Buy Order for {token} because not enough position + size")
                                     send_buy_order(order)
                                 # 3. Our current order is too large and needs to be resized
