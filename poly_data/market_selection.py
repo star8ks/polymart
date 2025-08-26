@@ -78,7 +78,7 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
 def calculate_position_size(
     market_row: pd.Series, 
     current_positions: Dict[str, Dict[str, float]], 
-    total_portfolio_value: Optional[float] = None
+    total_liquidity: Optional[float] = None
 ) -> PositionSizeResult:
     """
     Calculate how much money to invest in a specific market.
@@ -94,7 +94,7 @@ def calculate_position_size(
                    all market data (rewards, volatility, etc.)
         current_positions: Current positions across all tokens
                          {token_id: {'size': float, 'avgPrice': float}}
-        total_portfolio_value: Total portfolio value for percentage-based sizing
+        total_liquidity: Available cash to invest with for percentage-based sizing
     
     Returns:
         Position sizing information
@@ -177,7 +177,7 @@ def get_market_position_sizing(market_row: pd.Series) -> PositionSizeResult:
     return calculate_position_size(
         market_row, 
         global_state.positions,
-        total_portfolio_value=None  # Could calculate this if needed
+        total_liquidity=global_state.available_liquidity
     )
 
 

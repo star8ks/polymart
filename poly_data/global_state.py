@@ -24,7 +24,10 @@ selected_markets_df = None
 
 # Position sizing information for each market
 # Format: {condition_id: PositionSizeResult}
-market_position_sizes: Dict[str, PositionSizeResult] = {}  
+market_position_sizes: Dict[str, PositionSizeResult] = {}
+
+# Available cash liquidity for trading (USDC balance)
+available_liquidity: Optional[float] = None  
 
 # ============ Client & Parameters ============
 

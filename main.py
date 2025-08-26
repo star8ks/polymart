@@ -5,7 +5,7 @@ import traceback               # Exception handling
 import threading               # Thread management
 
 from poly_data.polymarket_client import PolymarketClient
-from poly_data.data_utils import update_markets, update_positions, update_orders
+from poly_data.data_utils import update_markets, update_positions, update_orders, update_liquidity
 from poly_data.websocket_handlers import connect_market_websocket, connect_user_websocket
 import poly_data.global_state as global_state
 from poly_data.data_processing import remove_from_performing
@@ -20,6 +20,7 @@ def update_once():
     update_markets()    # Get market information from Google Sheets
     update_positions()  # Get current positions from Polymarket
     update_orders()     # Get current orders from Polymarket
+    update_liquidity()  # Get available cash balance
 
 def remove_from_pending():
     """

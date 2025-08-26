@@ -47,6 +47,16 @@ def update_positions(avgOnly=False):
     
         global_state.positions[asset] = position
 
+
+def update_liquidity():
+    """Update available cash liquidity for trading"""
+    try:
+        global_state.available_liquidity = global_state.client.get_usdc_balance()
+        print(f"Updated available liquidity: ${global_state.available_liquidity:.2f}")
+    except Exception as e:
+        print(f"Error updating liquidity: {e}")
+        # Keep previous value if update fails
+
 def get_position(token):
     token = str(token)
     if token in global_state.positions:
@@ -158,11 +168,14 @@ def update_markets():
         # Apply custom market filtering logic
         global_state.selected_markets_df = filter_selected_markets(global_state.df)
         
+        # Update available liquidity
+        update_liquidity()
+        
         # Calculate position sizes for each selected market
         global_state.market_position_sizes = {}
         for _, row in global_state.selected_markets_df.iterrows():
             condition_id = str(row['condition_id'])
-            position_size_result = calculate_position_size(row, global_state.positions)
+            position_size_result = calculate_position_size(row, global_state.positions, global_state.available_liquidity)
             global_state.market_position_sizes[condition_id] = position_size_result
     
     # Use selected markets (after filtering) for token tracking and trading setup
