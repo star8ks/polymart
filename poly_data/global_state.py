@@ -1,6 +1,8 @@
 import threading
 import pandas as pd
+from typing import Dict, Optional
 
+from poly_data.market_selection import PositionSizeResult
 from poly_data.polymarket_client import PolymarketClient
 
 # ============ Market Data ============
@@ -15,7 +17,14 @@ REVERSE_TOKENS = {}
 all_data = {}  
 
 # Market configuration data from Google Sheets
-df = None  
+df = None
+
+# Filtered markets after applying custom selection logic
+selected_markets_df = None
+
+# Position sizing information for each market
+# Format: {condition_id: PositionSizeResult}
+market_position_sizes: Dict[str, PositionSizeResult] = {}  
 
 # ============ Client & Parameters ============
 

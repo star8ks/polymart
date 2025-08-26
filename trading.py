@@ -12,6 +12,7 @@ import poly_data.CONSTANTS as CONSTANTS
 # Import utility functions for trading
 from poly_data.trading_utils import get_best_bid_ask_deets, get_order_prices, get_buy_sell_amount, round_down, round_up
 from poly_data.data_utils import get_position, get_order, set_position
+from poly_data.market_selection import get_enhanced_market_row
 
 # Create directory for storing position risk information
 if not os.path.exists('positions/'):
@@ -146,8 +147,13 @@ async def perform_trade(market):
     async with market_locks[market]:
         try:
             client = global_state.client
-            # Get market details from the configuration
-            row = global_state.df[global_state.df['condition_id'] == market].iloc[0]      
+            # Get market details from the configuration with enhanced position sizing
+            row = get_enhanced_market_row(market)
+            
+            # Skip trading if market is not in selected markets (filtered out)
+            if row is None:
+                print(f"Market {market} not found in selected markets, skipping")
+                return      
             # Determine decimal precision from tick size
             round_length = len(str(row['tick_size']).split(".")[1])
 
