@@ -107,13 +107,6 @@ def find_best_price_with_size(price_dict, min_size, reverse=False):
     return best_price, best_size, second_best_price, second_best_size, top_price
 
 def get_order_prices(best_bid, best_bid_size, top_bid,  best_ask, best_ask_size, top_ask, avgPrice, row):
-    # EXPERIMENTAL: if we are not on a risky market, optimize for rewards
-    # if abs(best_ask - best_bid) < row['max_spread']/100 and row['volatility_sum'] < 10:
-    #     midpoint = (best_ask + best_bid) / 2
-    #     bid_price = midpoint - row['tick_size']
-    #     ask_price = midpoint + row['tick_size']
-    #     return bid_price, ask_price
-
     bid_price = best_bid + row['tick_size']
     ask_price = best_ask - row['tick_size']
 

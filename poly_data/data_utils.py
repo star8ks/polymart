@@ -3,7 +3,6 @@ from poly_data.utils import get_sheet_df
 import time
 import poly_data.global_state as global_state
 
-#sth here seems to be removing the position
 def update_positions(avgOnly=False):
     pos_df = global_state.client.get_all_positions()
 
@@ -20,26 +19,29 @@ def update_positions(avgOnly=False):
         if not avgOnly:
             position['size'] = row['size']
         else:
-            
-            for col in [f"{asset}_sell", f"{asset}_buy"]:
-                #need to review this
-                if col not in global_state.performing or not isinstance(global_state.performing[col], set) or len(global_state.performing[col]) == 0:
+            # Only update size if there are no pending trades on either side
+            buy_key = f"{asset}_buy"
+            sell_key = f"{asset}_sell"
+
+            buy_pending = isinstance(global_state.performing.get(buy_key, set()), set) and len(global_state.performing.get(buy_key, set())) > 0
+            sell_pending = isinstance(global_state.performing.get(sell_key, set()), set) and len(global_state.performing.get(sell_key, set())) > 0
+
+            if buy_pending or sell_pending:
+                print(f"ALERT: Skipping update for {asset} because there are trades pending (buy: {global_state.performing.get(buy_key, set())}, sell: {global_state.performing.get(sell_key, set())})")
+            else:
+                # Also skip shortly after a local trade update to avoid racing API lag
+                if asset in global_state.last_trade_update and time.time() - global_state.last_trade_update[asset] < 5:
+                    print(f"Skipping update for {asset} because last trade update was less than 5 seconds ago")
+                else:
                     try:
                         old_size = position['size']
                     except:
                         old_size = 0
 
-                    if asset in  global_state.last_trade_update:
-                        if time.time() - global_state.last_trade_update[asset] < 5:
-                            print(f"Skipping update for {asset} because last trade update was less than 5 seconds ago")
-                            continue
-
                     if old_size != row['size']:
                         print(f"No trades are pending. Updating position from {old_size} to {row['size']} and avgPrice to {row['avgPrice']} using API")
-    
+
                     position['size'] = row['size']
-                else:
-                    print(f"ALERT: Skipping update for {asset} because there are trades pending for {col} looking like {global_state.performing[col]}")
     
         global_state.positions[asset] = position
 
