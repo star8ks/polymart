@@ -3,6 +3,7 @@ from poly_data.utils import get_sheet_df
 import time
 import poly_data.global_state as global_state
 
+# Note: is accidently removing position bug fixed? 
 def update_positions(avgOnly=False):
     pos_df = global_state.client.get_all_positions()
 
