@@ -132,7 +132,7 @@ def calculate_market_depth(bids_df, asks_df, midpoint, s_max):
     
     return depth_yes_in, depth_no_in
 
-def calculate_attractiveness_score(rewards_daily_rate, spread, max_spread, tick_size, midpoint, 
+def calculate_attractiveness_score(gm_rewards_per_100, spread, max_spread, tick_size, midpoint, 
                                  depth_yes_in, depth_no_in, volatility=None, 
                                  in_game_multiplier=1.0, plan_two_sided=True, alpha=0.1):
     """Calculate attractiveness score based on market conditions and strategy"""
@@ -164,7 +164,7 @@ def calculate_attractiveness_score(rewards_daily_rate, spread, max_spread, tick_
     
     # Final attractiveness score
     attractiveness_score = (
-        rewards_daily_rate * in_game_multiplier * boost * two_side_multiplier * marginal_share_proxy
+        (gm_rewards_per_100**2) * in_game_multiplier * boost * two_side_multiplier * marginal_share_proxy
     ) / (1.0 + risk_penalty)
     
     return attractiveness_score
@@ -271,7 +271,7 @@ def process_single_row(row, client):
 
     # Calculate attractiveness score
     ret['attractiveness_score'] = calculate_attractiveness_score(
-        rewards_daily_rate=rate,
+        gm_rewards_per_100=ret['gm_reward_per_100'],
         spread=ret['best_ask'] - ret['best_bid'],
         max_spread=ret['max_spread'],
         tick_size=TICK_SIZE,
