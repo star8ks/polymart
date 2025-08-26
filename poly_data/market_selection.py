@@ -164,23 +164,6 @@ def get_active_markets() -> pd.DataFrame:
     return filtered_markets
 
 
-def get_market_position_sizing(market_row: pd.Series) -> PositionSizeResult:
-    """
-    Get position sizing information for a specific market.
-    
-    Args:
-        market_row: Market data row
-        
-    Returns:
-        Position sizing information
-    """
-    return calculate_position_size(
-        market_row, 
-        global_state.positions,
-        total_liquidity=global_state.available_liquidity
-    )
-
-
 def get_enhanced_market_row(condition_id: str) -> Optional[pd.Series]:
     """
     Get market row data with enhanced position sizing information.
