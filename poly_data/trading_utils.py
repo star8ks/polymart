@@ -144,8 +144,6 @@ def get_order_prices(best_bid, top_bid, best_ask, top_ask, avgPrice, row):
     return bid_price, ask_price
 
 
-
-
 def round_down(number, decimals):
     factor = 10 ** decimals
     return math.floor(number * factor) / factor
@@ -158,45 +156,23 @@ def get_buy_sell_amount(position, bid_price, row, other_token_position=0):
     buy_amount = 0
     sell_amount = 0
 
-    # Get max_size, defaulting to trade_size if not specified
     max_size = row.get('max_size', row['trade_size'])
     trade_size = row['trade_size']
     
-    # Calculate total exposure across both sides
-    total_exposure = position + other_token_position
+    # effective_position = max(position - other_token_position, 0)
     
-    # If we haven't reached max_size on either side, continue building
     if position < max_size:
-        # Continue quoting trade_size amounts until we reach max_size
         remaining_to_max = max_size - position
         buy_amount = min(trade_size, remaining_to_max)
-        
-        # Only sell if we have substantial position (to allow for exit when needed)
-        if position >= trade_size:
-            sell_amount = min(position, trade_size)
-        else:
-            sell_amount = 0
-    else:
-        # We've reached max_size, implement progressive exit strategy
-        # Always offer to sell trade_size amount when at max_size
-        sell_amount = min(position, trade_size)
-        
-        # Continue quoting to buy if total exposure warrants it
-        if total_exposure < max_size * 2:  # Allow some flexibility for market making
-            buy_amount = trade_size
-        else:
-            buy_amount = 0
+
+    if position >= trade_size:
+        sell_amount = position
 
     # Ensure minimum order size compliance
     if buy_amount > 0.7 * row['min_size'] and buy_amount < row['min_size']:
         buy_amount = row['min_size']
-
-    # Apply multiplier for low-priced assets
-    if bid_price < 0.1 and buy_amount > 0:
-        multiplier = row.get('multiplier', '')
-        if multiplier != '' and multiplier is not None:
-            print(f"Multiplying buy amount by {int(multiplier)}")
-            buy_amount = buy_amount * int(multiplier)
+    if sell_amount > 0.7 * row['min_size'] and sell_amount < row['min_size']:
+        sell_amount = row['min_size']
 
     return buy_amount, sell_amount
 
