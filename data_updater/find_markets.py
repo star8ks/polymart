@@ -164,7 +164,7 @@ def calculate_attractiveness_score(gm_rewards_per_100, spread, max_spread, tick_
     
     # Final attractiveness score
     attractiveness_score = (
-        (gm_rewards_per_100**2) * in_game_multiplier * boost * two_side_multiplier * marginal_share_proxy
+        gm_rewards_per_100 * in_game_multiplier * boost * two_side_multiplier * marginal_share_proxy
     ) / (1.0 + risk_penalty)
     
     return attractiveness_score

@@ -14,7 +14,7 @@ def get_sheet_df(read_only=None):
         read_only (bool): If None, auto-detects based on credentials availability
     """
     all = 'All Markets'
-    sel = 'Selected Markets'
+    vol = 'Volatility Markets'
 
     # Auto-detect read-only mode if not specified
     if read_only is None:
@@ -29,9 +29,10 @@ def get_sheet_df(read_only=None):
         print("No credentials found, falling back to read-only mode")
         spreadsheet = get_spreadsheet(read_only=True)
 
-    wk = spreadsheet.worksheet(sel)
+    wk = spreadsheet.worksheet(vol)
     df = pd.DataFrame(wk.get_all_records())
     df = df[df['question'] != ""].reset_index(drop=True)
+    df = df[['question']] # so we don't have merge problems
 
     wk2 = spreadsheet.worksheet(all)
     df2 = pd.DataFrame(wk2.get_all_records())

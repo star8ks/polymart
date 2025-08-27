@@ -12,15 +12,18 @@ from typing import Dict, Optional, Tuple
 from dataclasses import dataclass
 import pandas as pd
 import poly_data.global_state as global_state
+import numpy as np
 
+
+INVESTMENT_CEILING = 2000
+MAX_POSITION_MULT = 4
+BUDGET_MULT = 3
 
 @dataclass
 class PositionSizeResult:
     """Result of position sizing calculation"""
     trade_size: float
     max_size: float
-    risk_multiplier: float
-    sizing_reason: str
 
 
 @dataclass 
@@ -31,138 +34,123 @@ class Position:
 
 
 def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Apply additional filtering logic to markets from the Selected Markets sheet.
-    
-    This function allows you to implement custom logic to further filter the markets
-    that come from the Google Sheets "Selected Markets" tab. You can add criteria like:
-    - Market-specific risk checks
-    - Liquidity requirements
-    - Volatility thresholds
-    - Time-based filters (e.g., markets closing soon)
-    - Portfolio balance considerations
-    
-    Args:
-        markets_df: DataFrame containing markets from Selected Markets sheet
-                   merged with All Markets data
-    
-    Returns:
-        Filtered DataFrame with markets that should be actively traded
+    df = markets_df.copy()
+    if 'attractiveness_score' not in df.columns:
+        raise Exception("attractiveness_score column missing")
+
+    df['attractiveness_score'] = pd.to_numeric(df['attractiveness_score'], errors='coerce')
+    df_sorted = df.sort_values(by='attractiveness_score', ascending=False, na_position='last')
+
+    top_n = 30
+    return df_sorted.head(top_n).reset_index(drop=True)
+
+
+def calculate_position_sizes(): 
+    total_liquidity = global_state.available_liquidity
+    budget = total_liquidity * BUDGET_MULT
+    total_sharpe = global_state.selected_markets_df['attractiveness_score'].sum()
+
+    global_state.market_position_sizes = {}
+    for _, row in global_state.selected_markets_df.iterrows():
+        condition_id = str(row['condition_id'])
+        sharpe = row['attractiveness_score']
+
+        size = budget * (sharpe / total_sharpe)
         
-    Example filtering logic you might implement:
-    - Remove markets with volatility_sum > custom_threshold
-    - Remove markets with insufficient liquidity
-    - Remove markets that conflict with existing positions
-    - Apply custom scoring/ranking logic
-    """
+        global_state.market_position_sizes[condition_id] = PositionSizeResult(
+            trade_size=size,
+            max_size=size * MAX_POSITION_MULT
+        )
     
-    # STUB IMPLEMENTATION - Currently returns all markets unchanged
-    # TODO: Implement your custom filtering logic here
-    
-    print(f"Market filter stub: Processing {len(markets_df)} markets from Selected Markets")
-    
-    # Example stub logic (commented out):
-    # filtered_df = markets_df[
-    #     (markets_df['volatility_sum'] < 15) &  # Lower volatility threshold
-    #     (markets_df['attractiveness_score'] > 5) &  # Higher attractiveness requirement
-    #     (markets_df['best_ask'] - markets_df['best_bid'] < 0.05)  # Tighter spread requirement
-    # ]
-    
-    # For now, return all markets unchanged
-    filtered_df = markets_df.copy()
-    
-    print(f"Market filter stub: Returning {len(filtered_df)} markets after filtering")
-    return filtered_df
+    floors = {row['condition_id']: float(row.get('min_size')) for _, row in global_state.selected_markets_df.iterrows()}
+    ceilings = {row['condition_id']: INVESTMENT_CEILING for _, row in global_state.selected_markets_df.iterrows()}
 
+    global_state.market_position_sizes = redistribute_for_bounds(global_state.market_position_sizes, floors, ceilings)
 
-def calculate_position_size(
-    market_row: pd.Series, 
-    current_positions: Dict[str, Dict[str, float]], 
-    total_liquidity: Optional[float] = None
-) -> PositionSizeResult:
+def redistribute_for_bounds(position_sizes: dict[str, PositionSizeResult], floors: dict[str, float], ceilings: dict[str, float], tol: float = 1e-12, max_iter: int = 100) -> dict[str, PositionSizeResult]:
     """
-    Calculate how much money to invest in a specific market.
-    
-    This function determines the position size for each market based on:
-    - Market characteristics (volatility, liquidity, attractiveness)
-    - Current portfolio state
-    - Risk management rules
-    - Available capital
-    
+    Redistribute trade sizes so each respects its own [floor_i, ceiling_i] bound
+    while preserving the total sum of the original trade sizes.
+
+    This solves the projection onto {x : floors <= x <= ceilings, sum(x) = sum(initial)}
+    via a 1-D root-finding on the Lagrange multiplier.
+
     Args:
-        market_row: Single row from the filtered markets DataFrame containing
-                   all market data (rewards, volatility, etc.)
-        current_positions: Current positions across all tokens
-                         {token_id: {'size': float, 'avgPrice': float}}
-        total_liquidity: Available cash to invest with for percentage-based sizing
-    
+        position_sizes: Mapping of id -> PositionSizeResult (uses trade_size as the weight)
+        floors: Mapping of id -> lower bound for trade_size
+        ceilings: Mapping of id -> upper bound for trade_size
+        tol: Tolerance for sum matching
+        max_iter: Max iterations for bisection
+
     Returns:
-        Position sizing information
-              
-    Example sizing logic you might implement:
-    - Higher attractiveness_score -> larger position
-    - Higher volatility -> smaller position  
-    - Existing position -> smaller additional size
-    - Portfolio concentration limits
-    - Kelly criterion or other position sizing formulas
+        Dict[id, float]: Adjusted trade sizes satisfying bounds and target sum
     """
-    
-    # STUB IMPLEMENTATION - Currently uses market's existing trade_size
-    # TODO: Implement your custom position sizing logic here
-    
-    market_question: str = market_row.get('question', 'Unknown Market')
-    base_trade_size: float = float(market_row.get('trade_size', 100))  # Default fallback
-    existing_max_size: float = float(market_row.get('max_size', base_trade_size))
-    
-    print(f"Position sizing stub for: {market_question[:50]}...")
-    
-    # Example stub logic (commented out):
-    # attractiveness: float = float(market_row.get('attractiveness_score', 1))
-    # volatility: float = float(market_row.get('volatility_sum', 10))
-    # 
-    # # Higher attractiveness -> larger size, higher volatility -> smaller size
-    # risk_multiplier: float = min(2.0, max(0.5, attractiveness / 10)) * min(1.0, 20 / max(volatility, 1))
-    # 
-    # # Check for existing positions to avoid overconcentration
-    # token1_pos: float = current_positions.get(str(market_row['token1']), {}).get('size', 0.0)
-    # token2_pos: float = current_positions.get(str(market_row['token2']), {}).get('size', 0.0)
-    # existing_exposure: float = abs(token1_pos) + abs(token2_pos)
-    # 
-    # if existing_exposure > base_trade_size * 0.5:
-    #     risk_multiplier *= 0.5  # Reduce size if already have exposure
-    
-    # For now, use existing trade_size logic
-    risk_multiplier: float = 1.0
-    sizing_reason: str = "Using default trade_size from sheet (stub implementation)"
-    
-    result = PositionSizeResult(
-        trade_size=base_trade_size,
-        max_size=existing_max_size,
-        risk_multiplier=risk_multiplier,
-        sizing_reason=sizing_reason
-    )
-    
-    print(f"Position sizing stub result: trade_size={result.trade_size}, max_size={result.max_size}, multiplier={result.risk_multiplier}")
-    
-    return result
 
+    if position_sizes is None or len(position_sizes) == 0:
+        return {}
 
-def get_active_markets() -> pd.DataFrame:
-    """
-    Get the list of markets that should be actively traded, after applying
-    both sheet selection and custom filtering logic.
-    
-    Returns:
-        Final filtered markets ready for trading
-    """
-    if global_state.df is None or len(global_state.df) == 0:
-        return pd.DataFrame()
-    
-    # Apply custom market filtering
-    filtered_markets: pd.DataFrame = filter_selected_markets(global_state.df)
-    
-    return filtered_markets
+    keys = list(position_sizes.keys())
+    w = np.asarray([float(position_sizes[k].trade_size) for k in keys], dtype=float)
 
+    n = w.size
+    lower = np.empty(n, dtype=float)
+    upper = np.empty(n, dtype=float)
+    for i, k in enumerate(keys):
+        lower[i] = float(floors.get(k, -np.inf))
+        upper[i] = float(ceilings.get(k, np.inf))
+
+    # Ensure valid bounds
+    if not np.all(lower <= upper + 1e-15):
+        raise ValueError("Some lower bounds exceed upper bounds.")
+
+    target_sum = float(w.sum())
+
+    # Feasibility check
+    finite_lower = np.where(np.isfinite(lower), lower, -1e300)
+    finite_upper = np.where(np.isfinite(upper), upper, 1e300)
+    min_possible = finite_lower.sum()
+    max_possible = finite_upper.sum()
+    if target_sum < min_possible - 1e-12 or target_sum > max_possible + 1e-12:
+        raise ValueError(
+            f"Infeasible target sum {target_sum:.6g}; must be in [{min_possible:.6g}, {max_possible:.6g}] given the bounds."
+        )
+
+    def sum_after_shift(lmbda: float) -> float:
+        return float(np.clip(w + lmbda, lower, upper).sum())
+
+    # Bracket lambda using bound-shift extremes (use finite parts to guarantee finite bracket)
+    shift_lo = lower - w
+    shift_hi = upper - w
+    finite_lo = np.where(np.isfinite(shift_lo), shift_lo, 0.0)
+    finite_hi = np.where(np.isfinite(shift_hi), shift_hi, 0.0)
+    lo = np.min(finite_lo) - 1.0
+    hi = np.max(finite_hi) + 1.0
+
+    # Bisection on lambda
+    for _ in range(max_iter):
+        mid = 0.5 * (lo + hi)
+        s = sum_after_shift(mid)
+        if abs(s - target_sum) <= tol:
+            lam = mid
+            break
+        if s < target_sum:
+            lo = mid
+        else:
+            hi = mid
+    else:
+        lam = 0.5 * (lo + hi)
+
+    x = np.clip(w + lam, lower, upper)
+
+    # Final tiny normalization for residual
+    diff = target_sum - float(x.sum())
+    if abs(diff) > tol:
+        free = (x > lower + 1e-14) & (x < upper - 1e-14)
+        if np.any(free):
+            x[free] += diff / free.sum()
+            x = np.clip(x, lower, upper)
+
+    return {k: PositionSizeResult(trade_size=float(x[i]), max_size=float(x[i]) * MAX_POSITION_MULT) for i, k in enumerate(keys)}
 
 def get_enhanced_market_row(condition_id: str) -> Optional[pd.Series]:
     """
@@ -191,10 +179,7 @@ def get_enhanced_market_row(condition_id: str) -> Optional[pd.Series]:
     position_size_info = global_state.market_position_sizes.get(condition_id)
     if position_size_info:
         # Override trade_size and max_size with calculated values
-        calculated_trade_size = position_size_info.trade_size * position_size_info.risk_multiplier
-        market_row['trade_size'] = calculated_trade_size
+        market_row['trade_size'] = position_size_info.trade_size
         market_row['max_size'] = position_size_info.max_size
-        market_row['risk_multiplier'] = position_size_info.risk_multiplier
-        market_row['sizing_reason'] = position_size_info.sizing_reason
     
     return market_row

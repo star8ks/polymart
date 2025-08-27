@@ -2,7 +2,6 @@ import threading
 import pandas as pd
 from typing import Dict, Optional
 
-from poly_data.market_selection import PositionSizeResult
 from poly_data.polymarket_client import PolymarketClient
 
 # ============ Market Data ============
@@ -24,7 +23,7 @@ selected_markets_df = None
 
 # Position sizing information for each market
 # Format: {condition_id: PositionSizeResult}
-market_position_sizes: Dict[str, PositionSizeResult] = {}
+market_position_sizes = {}
 
 # Available cash liquidity for trading (USDC balance)
 available_liquidity: Optional[float] = None  

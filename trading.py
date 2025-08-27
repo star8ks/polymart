@@ -149,7 +149,7 @@ async def perform_trade(market):
             client = global_state.client
             # Get market details from the configuration with enhanced position sizing
             row = get_enhanced_market_row(market)
-            
+
             # Skip trading if market is not in selected markets (filtered out)
             if row is None:
                 print(f"Market {market} not found in selected markets, skipping")
@@ -158,7 +158,8 @@ async def perform_trade(market):
             round_length = len(str(row['tick_size']).split(".")[1])
 
             # Get trading parameters for this market type
-            params = global_state.params[row['param_type']]
+            # params = global_state.params[row['param_type']]
+            params = global_state.params['mid'] # hardcode for now
             
             # Create a list with both outcomes for the market
             deets = [

@@ -2,7 +2,7 @@ import poly_data.global_state as global_state
 from poly_data.utils import get_sheet_df
 import time
 import poly_data.global_state as global_state
-from poly_data.market_selection import filter_selected_markets, calculate_position_size
+from poly_data.market_selection import calculate_position_sizes, filter_selected_markets
 
 # Note: is accidently removing position bug fixed? 
 def update_positions(avgOnly=False):
@@ -171,12 +171,7 @@ def update_markets():
         # Update available liquidity
         update_liquidity()
         
-        # Calculate position sizes for each selected market
-        global_state.market_position_sizes = {}
-        for _, row in global_state.selected_markets_df.iterrows():
-            condition_id = str(row['condition_id'])
-            position_size_result = calculate_position_size(row, global_state.positions, global_state.available_liquidity)
-            global_state.market_position_sizes[condition_id] = position_size_result
+        calculate_position_sizes()
     
     # Use selected markets (after filtering) for token tracking and trading setup
     if global_state.selected_markets_df is not None:
