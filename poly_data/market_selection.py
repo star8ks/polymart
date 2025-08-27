@@ -17,7 +17,8 @@ import numpy as np
 
 INVESTMENT_CEILING = 2000
 MAX_POSITION_MULT = 4
-BUDGET_MULT = 3
+BUDGET_MULT = 4
+MARKET_COUNT = 20
 
 @dataclass
 class PositionSizeResult:
@@ -41,7 +42,7 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
     df['attractiveness_score'] = pd.to_numeric(df['attractiveness_score'], errors='coerce')
     df_sorted = df.sort_values(by='attractiveness_score', ascending=False, na_position='last')
 
-    top_n = 30
+    top_n = MARKET_COUNT
     return df_sorted.head(top_n).reset_index(drop=True)
 
 
@@ -65,7 +66,18 @@ def calculate_position_sizes():
     floors = {row['condition_id']: float(row.get('min_size')) for _, row in global_state.selected_markets_df.iterrows()}
     ceilings = {row['condition_id']: INVESTMENT_CEILING for _, row in global_state.selected_markets_df.iterrows()}
 
-    global_state.market_position_sizes = redistribute_for_bounds(global_state.market_position_sizes, floors, ceilings)
+    try:
+        global_state.market_position_sizes = redistribute_for_bounds(global_state.market_position_sizes, floors, ceilings)
+    except Exception as e:
+        print(f"Error redistributing for bounds: {e}")
+        global_state.market_position_sizes = filter_out_outbound_markets(global_state.market_position_sizes, floors, ceilings)
+        
+def filter_out_outbound_markets(position_sizes: dict[str, PositionSizeResult], floors: dict[str, float], ceilings: dict[str, float]):
+    positions = position_sizes.copy()
+    for k, v in positions.items():
+        if v.trade_size < floors[k] or v.trade_size > ceilings[k]:
+            positions[k].trade_size = 0
+    return positions
 
 def redistribute_for_bounds(position_sizes: dict[str, PositionSizeResult], floors: dict[str, float], ceilings: dict[str, float], tol: float = 1e-12, max_iter: int = 100) -> dict[str, PositionSizeResult]:
     """
