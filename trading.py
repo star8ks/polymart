@@ -248,8 +248,8 @@ async def perform_trade(market):
                
                 # Calculate optimal bid and ask prices based on market conditions
                 bid_price, ask_price = get_order_prices(
-                    best_bid, best_bid_size, top_bid, best_ask, 
-                    best_ask_size, top_ask, avgPrice, row
+                    best_bid, top_bid, best_ask, 
+                    top_ask, avgPrice, row
                 )
 
                 bid_price = round(bid_price, round_length)

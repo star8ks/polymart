@@ -106,34 +106,40 @@ def find_best_price_with_size(price_dict, min_size, reverse=False):
 
     return best_price, best_size, second_best_price, second_best_size, top_price
 
-def get_order_prices(best_bid, best_bid_size, top_bid,  best_ask, best_ask_size, top_ask, avgPrice, row):
-    bid_price = best_bid + row['tick_size']
-    ask_price = best_ask - row['tick_size']
+# def get_order_prices(best_bid, best_bid_size, top_bid,  best_ask, best_ask_size, top_ask, avgPrice, row):
+#     bid_price = best_bid + row['tick_size']
+#     ask_price = best_ask - row['tick_size']
 
-    if best_bid_size < row['min_size'] * 1.5:
-        bid_price = best_bid
+#     if best_bid_size < row['min_size'] * 1.5:
+#         bid_price = best_bid
     
-    if best_ask_size < 250 * 1.5:
-        ask_price = best_ask
-    
+#     if best_ask_size < 250 * 1.5:
+#         ask_price = best_ask
 
-    if bid_price >= top_ask:
+#     if bid_price >= top_ask:
+#         bid_price = top_bid
+
+#     if ask_price <= top_bid:
+#         ask_price = top_ask
+
+#     if bid_price == ask_price:
+#         bid_price = top_bid
+#         ask_price = top_ask
+
+#     #temp for sleep
+#     if ask_price <= avgPrice and avgPrice > 0:
+#         ask_price = avgPrice
+
+#     return bid_price, ask_price
+
+def get_order_prices(best_bid, top_bid, best_ask, top_ask, avgPrice, row):
+    tick = row['tick_size']
+    bid_price = min(best_bid + tick, avgPrice - tick)
+    ask_price = max(best_ask - tick, avgPrice + tick)
+
+    if (bid_price + ask_price) >= 1:
         bid_price = top_bid
-
-    if ask_price <= top_bid:
         ask_price = top_ask
-
-    if bid_price == ask_price:
-        bid_price = top_bid
-        ask_price = top_ask
-
-    # if ask_price <= avgPrice:
-    #     if avgPrice - ask_price <= (row['max_spread']*1.7/100):
-    #         ask_price = avgPrice
-
-    #temp for sleep
-    if ask_price <= avgPrice and avgPrice > 0:
-        ask_price = avgPrice
 
     return bid_price, ask_price
 
