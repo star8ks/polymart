@@ -17,10 +17,9 @@ def update_once():
     """
     Initialize the application state by fetching market data, positions, and orders.
     """
-    update_markets()    # Get market information from Google Sheets
     update_positions()  # Get current positions from Polymarket
     update_orders()     # Get current orders from Polymarket
-    update_liquidity()  # Get available cash balance
+    update_markets()    # Get market information from Google Sheets
 
 def remove_from_pending():
     """
