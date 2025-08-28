@@ -17,8 +17,8 @@ import numpy as np
 
 INVESTMENT_CEILING = 2000
 MAX_POSITION_MULT = 4
-BUDGET_MULT = 4
-MARKET_COUNT = 20
+BUDGET_MULT = 6
+MARKET_COUNT = 30
 
 @dataclass
 class PositionSizeResult:
