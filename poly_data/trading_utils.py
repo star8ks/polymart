@@ -132,13 +132,19 @@ def find_best_price_with_size(price_dict, min_size, reverse=False):
 
 #     return bid_price, ask_price
 
-def get_order_prices(best_bid, top_bid, best_ask, top_ask, avgPrice, row):
+def get_order_prices(best_bid, top_bid, best_ask, top_ask, row):
     tick = row['tick_size']
+    avgPrice = (best_bid + best_ask) / 2
     bid_price = min(best_bid + tick, avgPrice - tick)
     ask_price = max(best_ask - tick, avgPrice + tick)
 
     if (bid_price + ask_price) >= 1:
         bid_price = top_bid
+        ask_price = top_ask
+    
+    if bid_price < 0.1 or bid_price > 0.9:
+        bid_price = top_bid
+    if ask_price < 0.1 or ask_price > 0.9:
         ask_price = top_ask
 
     return bid_price, ask_price
@@ -152,12 +158,12 @@ def round_up(number, decimals):
     factor = 10 ** decimals
     return math.ceil(number * factor) / factor
 
-def get_buy_sell_amount(position, row):
+def get_buy_sell_amount(position, row, force_sell=False):
     buy_amount = 0
     sell_amount = 0
 
-    max_size = row.get('max_size', row['trade_size'])
-    trade_size = row['trade_size']
+    trade_size = row.get('trade_size', position) # on sell-only mode
+    max_size = row.get('max_size', trade_size)
     
     # effective_position = max(position - other_token_position, 0)
     
@@ -165,7 +171,7 @@ def get_buy_sell_amount(position, row):
         remaining_to_max = max_size - position
         buy_amount = min(trade_size, remaining_to_max)
 
-    if position >= trade_size:
+    if position >= trade_size or force_sell:
         sell_amount = position
 
     # Ensure minimum order size compliance

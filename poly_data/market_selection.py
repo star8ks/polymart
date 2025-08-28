@@ -174,12 +174,13 @@ def get_enhanced_market_row(condition_id: str) -> Optional[pd.Series]:
     Returns:
         Enhanced market row with position sizing data, or None if not found
     """
-    if global_state.selected_markets_df is None:
+    active_markets = global_state.get_active_markets()
+    if active_markets is None:
         return None
     
     # Find the market in selected_markets_df 
-    matching_markets = global_state.selected_markets_df[
-        global_state.selected_markets_df['condition_id'] == condition_id
+    matching_markets = active_markets[
+        active_markets['condition_id'] == condition_id
     ]
     
     if len(matching_markets) == 0:

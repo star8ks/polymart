@@ -21,6 +21,8 @@ df = None
 # Filtered markets after applying custom selection logic
 selected_markets_df = None
 
+markets_with_positions = None
+
 # Position sizing information for each market
 # Format: {condition_id: PositionSizeResult}
 market_position_sizes = {}
@@ -60,3 +62,27 @@ orders = {}
 # Format: {token_id: {'size': float, 'avgPrice': float}}
 positions = {}
 
+
+def get_active_markets():
+    """Return the union of selected markets and markets with positions.
+
+    When we have open positions, ensure those markets are included even if they
+    are not currently selected by the filter. Duplicates are removed by
+    `condition_id` while keeping the first occurrence.
+    """
+    combined_markets = selected_markets_df
+
+    # Treat None as empty for robustness
+    has_markets_with_positions = (
+        markets_with_positions is not None and len(markets_with_positions) > 0
+    )
+
+    if has_markets_with_positions:
+        if combined_markets is not None:
+            combined_markets = pd.concat([combined_markets, markets_with_positions]).drop_duplicates(
+                subset=['condition_id'], keep='first'
+            )
+        else:
+            combined_markets = markets_with_positions
+
+    return combined_markets

@@ -1,3 +1,4 @@
+import pandas as pd
 import poly_data.global_state as global_state
 from poly_data.utils import get_sheet_df
 import time
@@ -79,7 +80,6 @@ def set_position(token, side, size, price, source='websocket'):
         prev_price = global_state.positions[token]['avgPrice']
         prev_size = global_state.positions[token]['size']
 
-
         if size > 0:
             if prev_size == 0:
                 # Starting a new position
@@ -159,6 +159,25 @@ def set_order(token, side, size, price):
 
     
 
+def update_markets_with_positions():
+    """Create dataframe of markets where we currently have positions"""
+    if global_state.positions:
+        position_tokens = set()
+        for token, position in global_state.positions.items():
+            if position['size'] > 0:
+                position_tokens.add(str(token))
+        
+        if position_tokens:
+            # Find markets that contain any of our position tokens
+            global_state.markets_with_positions = global_state.df[
+                global_state.df['token1'].astype(str).isin(position_tokens) | 
+                global_state.df['token2'].astype(str).isin(position_tokens)
+            ].copy()
+        else:
+            global_state.markets_with_positions = global_state.df.iloc[0:0].copy()  # Empty dataframe with same structure
+    else:
+        global_state.markets_with_positions = global_state.df.iloc[0:0].copy()  # Empty dataframe with same structure
+
 def update_markets():    
     received_df, received_params = get_sheet_df()
 
@@ -168,14 +187,17 @@ def update_markets():
         # Apply custom market filtering logic
         global_state.selected_markets_df = filter_selected_markets(global_state.df)
         
+        # Update markets with positions
+        update_markets_with_positions()
+        
         # Update available liquidity
         update_liquidity()
         
         calculate_position_sizes()
     
-    # Use selected markets (after filtering) for token tracking and trading setup
-    if global_state.selected_markets_df is not None:
-        for _, row in global_state.selected_markets_df.iterrows():
+    combined_markets = global_state.get_active_markets()  
+    if combined_markets is not None:
+        for _, row in combined_markets.iterrows():
             for col in ['token1', 'token2']:
                 row[col] = str(row[col])
 
