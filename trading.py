@@ -207,7 +207,7 @@ async def perform_trade(market):
                 try:
                     client.merge_positions(amount_to_merge_raw, market, row['neg_risk'] == 'TRUE')
                 except Exception as e:
-                    print(f"Error merging positions: {e}")
+                    print(f"Error merging {amount_to_merge_raw} positions for market {market}: {e}")
                     traceback.print_exc()
                 
                 # TODO: for now, let it get updated by the background task
@@ -251,14 +251,15 @@ async def perform_trade(market):
                 # Calculate ratio of buy vs sell liquidity in the market
                 try:
                     overall_ratio = (deets['bid_sum_within_n_percent']) / (deets['ask_sum_within_n_percent'])
-                except:
+                except Exception as e:
+                    print(f"Error calculating overall liquidity ratio for {detail['name']}: using default value 0")
                     overall_ratio = 0
 
                 try:
                     second_best_bid = round(second_best_bid, round_length)
                     second_best_ask = round(second_best_ask, round_length)
-                except:
-                    pass
+                except Exception as e:
+                    print(f"Error rounding second best prices for {detail['name']}: {e}")
                 
                 top_bid = round(top_bid, round_length)
                 top_ask = round(top_ask, round_length)
@@ -354,7 +355,8 @@ async def perform_trade(market):
 
                     try:
                         ratio = (n_deets['bid_sum_within_n_percent']) / (n_deets['ask_sum_within_n_percent'])
-                    except:
+                    except Exception as e:
+                        print(f"Error calculating fresh liquidity ratio for {detail['name']} during sell logic: using default value 0")
                         ratio = 0
 
                     pos_to_sell = sell_amount  # Amount to sell in risk-off scenario
@@ -502,7 +504,7 @@ async def perform_trade(market):
                     #     send_sell_order(order)
 
         except Exception as ex:
-            print(f"Error performing trade for {market}: {ex}")
+            print(f"Critical error in perform_trade function for market {market} ({row.get('question', 'unknown question') if 'row' in locals() else 'unknown question'}): {ex}")
             traceback.print_exc()
 
         # Clean up memory and introduce a small delay

@@ -39,11 +39,11 @@ def remove_from_pending():
                         print(f"Removing stale entry {trade_id} from {col} after 15 seconds")
                         remove_from_performing(col, trade_id)
                         print("After removing: ", global_state.performing, global_state.performing_timestamps)
-                except:
-                    print("Error in remove_from_pending")
+                except Exception as e:
+                    print(f"Error removing stale trade {trade_id} from {col}: {e}")
                     print(traceback.format_exc())                
-    except:
-        print("Error in remove_from_pending")
+    except Exception as e:
+        print(f"Error in remove_from_pending function while cleaning stale trades: {e}")
         print(traceback.format_exc())
 
 def update_periodically():
@@ -72,8 +72,8 @@ def update_periodically():
                     
             gc.collect()  # Force garbage collection to free memory
             i += 1
-        except:
-            print("Error in update_periodically")
+        except Exception as e:
+            print(f"Error in update_periodically background thread (cycle {i}): {e}")
             print(traceback.format_exc())
             
 async def main():
@@ -104,8 +104,8 @@ async def main():
                 connect_user_websocket()
             )
             print("Reconnecting to the websocket")
-        except:
-            print("Error in main loop")
+        except Exception as e:
+            print(f"Error in main websocket connection loop: {e}")
             print(traceback.format_exc())
             
         await asyncio.sleep(1)

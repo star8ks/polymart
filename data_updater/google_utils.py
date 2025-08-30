@@ -72,7 +72,7 @@ class ReadOnlyWorksheet:
             return df.to_dict('records')
             
         except Exception as e:
-            print(f"Warning: Could not fetch data from sheet '{self.title}': {e}")
+            print(f"Error in get_all_records for Google Sheet '{self.title}': {e}")
             return []
     
     def get_all_values(self):
@@ -92,5 +92,5 @@ class ReadOnlyWorksheet:
             return headers + data
             
         except Exception as e:
-            print(f"Warning: Could not fetch data from sheet '{self.title}': {e}")
+            print(f"Error in get_all_values for Google Sheet '{self.title}': {e}")
             return []

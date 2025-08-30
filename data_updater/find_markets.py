@@ -16,7 +16,8 @@ def get_sel_df(spreadsheet, sheet_name='Selected Markets'):
         sel_df = pd.DataFrame(wk2.get_all_records())
         sel_df = sel_df[sel_df['question'] != ""].reset_index(drop=True)
         return sel_df
-    except:
+    except Exception as e:
+        print(f"Error fetching selected markets from sheet '{sheet_name}': {e}")
         return pd.DataFrame()
     
 def get_all_markets(client):
@@ -34,7 +35,8 @@ def get_all_markets(client):
 
             if cursor is None:
                 break
-        except:
+        except Exception as e:
+            print(f"Error fetching market batch with cursor '{cursor}': {e}")
             break
 
     all_df = pd.concat(all_markets)
@@ -197,23 +199,25 @@ def process_single_row(row, client):
 
     try:
         bids = pd.DataFrame(book.bids).astype(float)
-    except:
-        pass
+    except Exception as e:
+        print(f"Error processing bids for token {token1}: {e}")
 
     try:
         asks = pd.DataFrame(book.asks).astype(float)
-    except:
-        pass
+    except Exception as e:
+        print(f"Error processing asks for token {token1}: {e}")
 
 
     try:
         ret['best_bid'] = bids.iloc[-1]['price']
-    except:
+    except Exception as e:
+        print(f"Error getting best bid for token {token1}: {e}")
         ret['best_bid'] = 0
 
     try:
         ret['best_ask'] = asks.iloc[-1]['price']
-    except:
+    except Exception as e:
+        print(f"Error getting best ask for token {token1}: {e}")
         ret['best_ask'] = 0
 
     ret['midpoint'] = (ret['best_bid'] + ret['best_ask']) / 2
@@ -232,12 +236,14 @@ def process_single_row(row, client):
 
     try:
         bids_df = bids_df.merge(bids, on='price', how='left').fillna(0)
-    except:
+    except Exception as e:
+        print(f"Error merging bids data for token {token1}: {e}")
         bids_df = pd.DataFrame()
 
     try:
         asks_df = asks_df.merge(asks, on='price', how='left').fillna(0)
-    except:
+    except Exception as e:
+        print(f"Error merging asks data for token {token1}: {e}")
         asks_df = pd.DataFrame()
 
     best_bid_reward = 0
@@ -246,8 +252,8 @@ def process_single_row(row, client):
     try:
         ret_bid = add_formula_params(bids_df, ret['midpoint'], v, rate)
         best_bid_reward = round(ret_bid['reward_per_100'].max(), 2)
-    except:
-        pass
+    except Exception as e:
+        print(f"Error calculating bid rewards for token {token1}: {e}")
 
     best_ask_reward = 0
     ret_ask = pd.DataFrame()
@@ -255,8 +261,8 @@ def process_single_row(row, client):
     try:
         ret_ask = add_formula_params(asks_df, ret['midpoint'], v, rate)
         best_ask_reward = round(ret_ask['reward_per_100'].max(), 2)
-    except:
-        pass
+    except Exception as e:
+        print(f"Error calculating ask rewards for token {token1}: {e}")
 
     ret['bid_reward_per_100'] = best_bid_reward
     ret['ask_reward_per_100'] = best_ask_reward
@@ -296,8 +302,8 @@ def get_all_results(all_df, client, max_workers=3, batch_size=40):
         idx, row = args
         try:
             return process_single_row(row, client)
-        except:
-            print("error fetching market")
+        except Exception as e:
+            print(f"Error fetching market data for {row.get('question', 'unknown market')}: {e}")
             return None
 
     # Process in batches to respect rate limits (Book endpoint: 50 requests/10s)
@@ -383,8 +389,8 @@ def add_volatility_to_df(df, max_workers=2, batch_size=40):
         try:
             ret = add_volatility(row.to_dict())
             return ret
-        except:
-            print("Error fetching volatility")
+        except Exception as e:
+            print(f"Error fetching volatility for market {row.get('question', 'unknown market')}: {e}")
             return None
 
     # Process in batches to respect rate limits (Price endpoint: 100 requests/10s)

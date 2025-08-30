@@ -133,7 +133,7 @@ class PolymarketClient:
             resp = self.client.post_order(signed_order)
             return resp
         except Exception as ex:
-            print(ex)
+            print(f"Error posting order for token {marketId} ({action} {size} @ {price}): {ex}")
             return {}
 
     def get_order_book(self, market):

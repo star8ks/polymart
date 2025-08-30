@@ -39,10 +39,10 @@ async def connect_market_websocket(chunk):
                 # Process order book updates and trigger trading as needed
                 process_data(json_data)
         except websockets.ConnectionClosed:
-            print("Connection closed in market websocket")
+            print("Market websocket connection closed unexpectedly")
             print(traceback.format_exc())
         except Exception as e:
-            print(f"Exception in market websocket: {e}")
+            print(f"Unexpected error in market websocket connection: {e}")
             print(traceback.format_exc())
         finally:
             # Brief delay before attempting to reconnect
@@ -88,10 +88,10 @@ async def connect_user_websocket():
                 # Process trade and order updates
                 process_user_data(json_data)
         except websockets.ConnectionClosed:
-            print("Connection closed in user websocket")
+            print("User websocket connection closed unexpectedly")
             print(traceback.format_exc())
         except Exception as e:
-            print(f"Exception in user websocket: {e}")
+            print(f"Unexpected error in user websocket connection: {e}")
             print(traceback.format_exc())
         finally:
             # Brief delay before attempting to reconnect

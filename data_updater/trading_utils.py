@@ -32,9 +32,8 @@ def get_clob_client():
         client.set_api_creds(api_creds)
         return client
     except Exception as ex: 
-        print("Error creating clob client")
+        print(f"Error creating clob client connection: {ex}")
         print("________________")
-        print(ex)
         return None
 
 
@@ -117,7 +116,7 @@ def market_action( marketId, action, price, size ):
         resp = get_clob_client().post_order(signed_order)
         print(resp)
     except Exception as ex:
-        print(ex)
+        print(f"Error posting order in market_action for token {marketId}: {ex}")
         pass
     
     

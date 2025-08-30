@@ -130,5 +130,5 @@ if __name__ == "__main__":
             fetch_and_process_data()
             time.sleep(60 * 60)  # Sleep for an hour
         except Exception as e:
+            print(f"Error in market data update loop: {e}")
             traceback.print_exc()
-            print(str(e))

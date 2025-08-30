@@ -38,7 +38,8 @@ def update_positions(avgOnly=False):
                 else:
                     try:
                         old_size = position['size']
-                    except:
+                    except Exception as e:
+                        print(f"Error getting old position size for {asset}: {e}")
                         old_size = 0
 
                     if old_size != row['size']:

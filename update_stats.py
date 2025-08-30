@@ -12,6 +12,7 @@ if __name__ == '__main__':
         try:
             update_stats_once(client)
         except Exception as e:
+            print(f"Error updating account stats: {e}")
             traceback.print_exc()
 
         print("Now sleeping\n")
