@@ -132,9 +132,11 @@ def find_best_price_with_size(price_dict, min_size, reverse=False):
 
 #     return bid_price, ask_price
 
-def get_order_prices(best_bid, top_bid, best_ask, top_ask, row):
+def get_order_prices(best_bid, top_bid, best_ask, top_ask, avgPrice, row):
     tick = row['tick_size']
-    avgPrice = (best_bid + best_ask) / 2
+    if avgPrice == 0 or avgPrice is None:
+        avgPrice = (best_bid + best_ask) / 2
+    
     bid_price = min(best_bid + tick, avgPrice - tick)
     ask_price = max(best_ask - tick, avgPrice + tick)
 
@@ -179,5 +181,9 @@ def get_buy_sell_amount(position, row, force_sell=False):
         buy_amount = row['min_size']
     if sell_amount > 0.7 * row['min_size'] and sell_amount < row['min_size']:
         sell_amount = row['min_size']
+    
+    if force_sell:
+        buy_amount = 0
+
 
     return buy_amount, sell_amount

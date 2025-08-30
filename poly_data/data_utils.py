@@ -53,10 +53,36 @@ def update_liquidity():
     """Update available cash liquidity for trading"""
     try:
         global_state.available_liquidity = global_state.client.get_usdc_balance()
-        print(f"Updated available liquidity: ${global_state.available_liquidity:.2f}")
     except Exception as e:
         print(f"Error updating liquidity: {e}")
         # Keep previous value if update fails
+
+def get_total_balance():
+    """Calculate total balance as available liquidity plus invested collateral.
+
+    Uses in-memory state:
+    - `global_state.available_liquidity` for current USDC balance
+    - `global_state.positions` valued at average entry price (size * avgPrice)
+
+    Returns:
+        float | None: Total balance if computable, otherwise None.
+    """
+    try:
+        liquidity = float(global_state.available_liquidity) if global_state.available_liquidity is not None else 0.0
+
+        positions_value = 0.0
+        for _, position in getattr(global_state, 'positions', {}).items():
+            size = float(position.get('size', 0) or 0)
+            avg_price = float(position.get('avgPrice', 0) or 0)
+            if size > 0 and avg_price > 0:
+                positions_value += size * avg_price
+
+        total = liquidity + positions_value
+        global_state.total_balance = total
+        return total
+    except Exception as e:
+        print(f"Error calculating total balance: {e}")
+        return None
 
 def get_position(token):
     token = str(token)

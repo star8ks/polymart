@@ -11,8 +11,10 @@ import poly_data.CONSTANTS as CONSTANTS
 
 # Import utility functions for trading
 from poly_data.trading_utils import get_best_bid_ask_deets, get_order_prices, get_buy_sell_amount, round_down, round_up
-from poly_data.data_utils import get_position, get_order, set_position
+from poly_data.data_utils import get_position, get_order, get_total_balance, set_position
 from poly_data.market_selection import get_enhanced_market_row
+
+SELL_ONLY_THRESHOLD = 0.6
 
 # Create directory for storing position risk information
 if not os.path.exists('positions/'):
@@ -102,7 +104,7 @@ def send_sell_order(order):
     size_diff = abs(existing_sell_size - order['size']) if existing_sell_size > 0 else float('inf')
     
     should_cancel = (
-        price_diff > 0.005 or  # Cancel if price diff > 0.5 cents
+        price_diff > 0.001 or  # Cancel if price diff > 0.1 cents
         size_diff > order['size'] * 0.1 or  # Cancel if size diff > 10%
         existing_sell_size == 0  # Cancel if no existing sell order
     )
@@ -114,7 +116,7 @@ def send_sell_order(order):
         print(f"Keeping existing sell orders - minor changes: price diff: {price_diff:.4f}, size diff: {size_diff:.1f}")
         return  # Don't place new order if existing one is fine
 
-    # print(f'Creating new order for {order["size"]} at {order["price"]}')
+    print(f'Creating new sell order for {order["size"]} at {order["price"]}')
     client.create_order(
         order['token'], 
         'SELL', 
@@ -152,7 +154,7 @@ async def perform_trade(market):
 
             # Skip trading if market is not in selected markets (filtered out)
             if row is None:
-                print(f"Market {market} not found in selected markets, skipping")
+                print(f"Market {market} not found in active markets, skipping")
                 return
             
             # Check if market is in positions but not in selected markets (sell-only mode to free up capital)
@@ -161,6 +163,12 @@ async def perform_trade(market):
                 in_positions = market in global_state.markets_with_positions['condition_id'].values if global_state.markets_with_positions is not None else False
                 in_selected = market in global_state.selected_markets_df['condition_id'].values if global_state.selected_markets_df is not None else False
                 sell_only = in_positions and not in_selected      
+            
+            # Also sell if we have used most of our budget
+            total_balance = get_total_balance()
+            if global_state.available_liquidity < total_balance * (1 - SELL_ONLY_THRESHOLD):
+                print(f"Selling only because available liquidity {global_state.available_liquidity} is less than {total_balance * (1 - SELL_ONLY_THRESHOLD)}")
+                sell_only = True
             
             # Determine decimal precision from tick size
             round_length = len(str(row['tick_size']).split(".")[1])
@@ -188,13 +196,19 @@ async def perform_trade(market):
             # Only merge if positions are above minimum threshold
             if float(amount_to_merge) > CONSTANTS.MIN_MERGE_SIZE:
                 # Get exact position sizes from blockchain for merging
-                pos_1 = client.get_position(row['token1'])[0]
-                pos_2 = client.get_position(row['token2'])[0]
-                amount_to_merge = min(pos_1, pos_2)
+                pos_1_raw = client.get_position(row['token1'])[0]
+                pos_2_raw = client.get_position(row['token2'])[0]
+                amount_to_merge_raw = min(pos_1_raw, pos_2_raw)
 
-                print(f"Position 1 is of size {pos_1} and Position 2 is of size {pos_2}. Merging positions")
+                print(f"Position 1 is of size {pos_1_raw} and Position 2 is of size {pos_2_raw}. Merging positions")
                 # Execute the merge operation
-                client.merge_positions(amount_to_merge, market, row['neg_risk'] == 'TRUE')
+                print(f"Merging {amount_to_merge_raw} of {row['token1']} and {row['token2']}")
+
+                try:
+                    client.merge_positions(amount_to_merge_raw, market, row['neg_risk'] == 'TRUE')
+                except Exception as e:
+                    print(f"Error merging positions: {e}")
+                    traceback.print_exc()
                 
                 # TODO: for now, let it get updated by the background task
                 # Update our local position tracking
@@ -259,7 +273,7 @@ async def perform_trade(market):
                 # Calculate optimal bid and ask prices based on market conditions
                 bid_price, ask_price = get_order_prices(
                     best_bid, top_bid, best_ask, 
-                    top_ask, row
+                    top_ask, avgPrice, row
                 )
 
                 bid_price = round(bid_price, round_length)
