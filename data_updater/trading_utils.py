@@ -6,6 +6,7 @@ from py_clob_client.order_builder.constants import BUY
 from web3 import Web3
 
 import json
+from logan import Logan
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -22,7 +23,11 @@ def get_clob_client():
     chain_id = POLYGON
     
     if key is None:
-        print("Environment variable 'PK' cannot be found")
+        Logan.log(
+            "Environment variable 'PK' cannot be found",
+            type="error",
+            namespace="data_updater.trading_utils"
+        )
         return None
 
 
@@ -32,8 +37,12 @@ def get_clob_client():
         client.set_api_creds(api_creds)
         return client
     except Exception as ex: 
-        print(f"Error creating clob client connection: {ex}")
-        print("________________")
+        Logan.log(
+            f"Error creating clob client connection: {ex}",
+            type="error",
+            namespace="data_updater.trading_utils",
+            exception=ex
+        )
         return None
 
 
@@ -63,7 +72,11 @@ def approveContracts():
         usdc_tx_receipt = web3.eth.wait_for_transaction_receipt(signed_usdc_txn, 600)
 
 
-        print(f'USDC Transaction for {address} returned {usdc_tx_receipt}')
+        Logan.log(
+            f'USDC Transaction for {address} returned {usdc_tx_receipt}',
+            type="info",
+            namespace="data_updater.trading_utils"
+        )
         time.sleep(1)
 
         ctf_nonce = web3.eth.getTransactionCount( wallet.address )
@@ -78,7 +91,11 @@ def approveContracts():
         send_ctf_approval_tx = web3.eth.send_raw_transaction(signed_ctf_approval_tx.rawTransaction)
         ctf_approval_tx_receipt = web3.eth.wait_for_transaction_receipt(send_ctf_approval_tx, 600)
 
-        print(f'CTF Transaction for {address} returned {ctf_approval_tx_receipt}')
+        Logan.log(
+            f'CTF Transaction for {address} returned {ctf_approval_tx_receipt}',
+            type="info",
+            namespace="data_updater.trading_utils"
+        )
         time.sleep(1)
 
 
@@ -114,9 +131,18 @@ def market_action( marketId, action, price, size ):
     
     try:
         resp = get_clob_client().post_order(signed_order)
-        print(resp)
+        Logan.log(
+            f"Order response: {resp}",
+            type="info",
+            namespace="data_updater.trading_utils"
+        )
     except Exception as ex:
-        print(f"Error posting order in market_action for token {marketId}: {ex}")
+        Logan.log(
+            f"Error posting order in market_action for token {marketId}: {ex}",
+            type="error",
+            namespace="data_updater.trading_utils",
+            exception=ex
+        )
         pass
     
     

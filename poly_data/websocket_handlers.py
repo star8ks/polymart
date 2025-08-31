@@ -1,7 +1,7 @@
 import asyncio                      # Asynchronous I/O
 import json                        # JSON handling
 import websockets                  # WebSocket client
-import traceback                   # Exception handling
+from logan import Logan
 
 from poly_data.data_processing import process_data, process_user_data
 import poly_data.global_state as global_state
@@ -28,8 +28,11 @@ async def connect_market_websocket(chunk):
         message = {"assets_ids": chunk}
         await websocket.send(json.dumps(message))
 
-        print("\n")
-        print(f"Sent market subscription message: {message}")
+        Logan.log(
+            f"Sent market subscription message: {message}",
+            type="info",
+            namespace="websocket_handlers"
+        )
 
         try:
             # Process incoming market data indefinitely
@@ -38,12 +41,20 @@ async def connect_market_websocket(chunk):
                 json_data = json.loads(message)
                 # Process order book updates and trigger trading as needed
                 process_data(json_data)
-        except websockets.ConnectionClosed:
-            print("Market websocket connection closed unexpectedly")
-            print(traceback.format_exc())
+        except websockets.ConnectionClosed as e:
+            Logan.log(
+                "Market websocket connection closed unexpectedly",
+                type="error",
+                namespace="websocket_handlers",
+                exception=e
+            )
         except Exception as e:
-            print(f"Unexpected error in market websocket connection: {e}")
-            print(traceback.format_exc())
+            Logan.log(
+                f"Unexpected error in market websocket connection",
+                type="error",
+                namespace="websocket_handlers",
+                exception=e
+            )
         finally:
             # Brief delay before attempting to reconnect
             await asyncio.sleep(5)
@@ -77,8 +88,11 @@ async def connect_user_websocket():
         # Send authentication message
         await websocket.send(json.dumps(message))
 
-        print("\n")
-        print(f"Sent user subscription message")
+        Logan.log(
+            "Sent user subscription message",
+            type="info",
+            namespace="websocket_handlers"
+        )
 
         try:
             # Process incoming user data indefinitely
@@ -87,12 +101,20 @@ async def connect_user_websocket():
                 json_data = json.loads(message)
                 # Process trade and order updates
                 process_user_data(json_data)
-        except websockets.ConnectionClosed:
-            print("User websocket connection closed unexpectedly")
-            print(traceback.format_exc())
+        except websockets.ConnectionClosed as e:
+            Logan.log(
+                "User websocket connection closed unexpectedly",
+                type="error",
+                namespace="websocket_handlers",
+                exception=e
+            )
         except Exception as e:
-            print(f"Unexpected error in user websocket connection: {e}")
-            print(traceback.format_exc())
+            Logan.log(
+                f"Unexpected error in user websocket connection",
+                type="error",
+                namespace="websocket_handlers",
+                exception=e
+            )
         finally:
             # Brief delay before attempting to reconnect
             await asyncio.sleep(5)

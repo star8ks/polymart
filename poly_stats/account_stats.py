@@ -7,6 +7,7 @@ from gspread_dataframe import set_with_dataframe
 import requests
 import json
 import os
+from logan import Logan
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -40,7 +41,12 @@ def get_all_positions(client):
         positions = positions.rename(columns={'size': 'position_size'})
         return positions
     except Exception as e:
-        print(f"Error fetching all positions for account stats: {e}")
+        Logan.log(
+            f"Error fetching all positions for account stats: {e}",
+            type="error",
+            namespace="poly_stats.account_stats",
+            exception=e
+        )
         return pd.DataFrame()
     
 def combine_dfs(orders_df, positions, markets_df, selected_df):
@@ -113,17 +119,33 @@ def update_stats_once(client):
     selected_df = pd.DataFrame(wk_sel.get_all_records())
     
     markets_df = get_markets_df(wk_full)
-    print("Got spreadsheet...")
+    Logan.log(
+        "Got spreadsheet...",
+        type="info",
+        namespace="poly_stats.account_stats"
+    )
 
     orders_df = get_all_orders(client)
-    print("Got Orders...")
+    Logan.log(
+        "Got Orders...",
+        type="info",
+        namespace="poly_stats.account_stats"
+    )
     positions = get_all_positions(client)
-    print("Got Positions...")
+    Logan.log(
+        "Got Positions...",
+        type="info",
+        namespace="poly_stats.account_stats"
+    )
 
     if len(positions) > 0 or len(orders_df) > 0:
         combined_df = combine_dfs(orders_df, positions, markets_df, selected_df)
         earnings = get_earnings(client.client)
-        print("Got Earnings...")
+        Logan.log(
+            "Got Earnings...",
+            type="info",
+            namespace="poly_stats.account_stats"
+        )
         combined_df = combined_df.merge(earnings, on='question', how='left')
 
         combined_df = combined_df.fillna(0)
@@ -135,4 +157,8 @@ def update_stats_once(client):
 
         set_with_dataframe(wk_summary, combined_df, include_index=False, include_column_header=True, resize=True)
     else:
-        print("Position or order is empty")
+        Logan.log(
+            "Position or order is empty",
+            type="warning",
+            namespace="poly_stats.account_stats"
+        )

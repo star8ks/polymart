@@ -5,6 +5,7 @@ import pandas as pd
 import requests
 import re
 from dotenv import load_dotenv
+from logan import Logan
 
 load_dotenv()
 
@@ -97,7 +98,11 @@ class ReadOnlyWorksheet:
             
             for csv_url in urls_to_try:
                 try:
-                    print(f"Trying to fetch sheet '{self.title}' from: {csv_url}")
+                    Logan.log(
+                        f"Trying to fetch sheet '{self.title}' from: {csv_url}",
+                        type="debug",
+                        namespace="poly_utils.google_utils"
+                    )
                     response = requests.get(csv_url, timeout=30)
                     response.raise_for_status()
                     
@@ -111,25 +116,50 @@ class ReadOnlyWorksheet:
                         if self.title == 'Hyperparameters':
                             expected_cols = ['type', 'param', 'value']
                             if all(col in df.columns for col in expected_cols):
-                                print(f"Successfully fetched {len(df)} hyperparameter records")
+                                Logan.log(
+                                    f"Successfully fetched {len(df)} hyperparameter records",
+                                    type="info",
+                                    namespace="poly_utils.google_utils"
+                                )
                                 return df.to_dict('records')
                             else:
-                                print(f"Sheet doesn't match Hyperparameters format. Columns: {list(df.columns)}")
+                                Logan.log(
+                                    f"Sheet doesn't match Hyperparameters format. Columns: {list(df.columns)}",
+                                    type="warning",
+                                    namespace="poly_utils.google_utils"
+                                )
                                 continue
                         else:
-                            print(f"Successfully fetched {len(df)} records from sheet '{self.title}'")
+                            Logan.log(
+                                f"Successfully fetched {len(df)} records from sheet '{self.title}'",
+                                type="info",
+                                namespace="poly_utils.google_utils"
+                            )
                             # Convert to list of dictionaries (same format as gspread)
                             return df.to_dict('records')
                     
                 except Exception as url_error:
-                    print(f"Failed fetching sheet '{self.title}' from URL {csv_url}: {url_error}")
+                    Logan.log(
+                        f"Failed fetching sheet '{self.title}' from URL {csv_url}: {url_error}",
+                        type="warning",
+                        namespace="poly_utils.google_utils"
+                    )
                     continue
             
-            print(f"All URL attempts failed for sheet '{self.title}'")
+            Logan.log(
+                f"All URL attempts failed for sheet '{self.title}'",
+                type="error",
+                namespace="poly_utils.google_utils"
+            )
             return []
             
         except Exception as e:
-            print(f"Error in get_all_records for Google Sheet '{self.title}': {e}")
+            Logan.log(
+                f"Error in get_all_records for Google Sheet '{self.title}': {e}",
+                type="error",
+                namespace="poly_utils.google_utils",
+                exception=e
+            )
             return []
     
     def get_all_values(self):
@@ -149,7 +179,12 @@ class ReadOnlyWorksheet:
             return headers + data
             
         except Exception as e:
-            print(f"Error in get_all_values for Google Sheet '{self.title}': {e}")
+            Logan.log(
+                f"Error in get_all_values for Google Sheet '{self.title}': {e}",
+                type="error",
+                namespace="poly_utils.google_utils",
+                exception=e
+            )
             return []
 
 

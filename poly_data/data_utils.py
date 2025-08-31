@@ -4,6 +4,7 @@ from poly_data.utils import get_sheet_df
 import time
 import poly_data.global_state as global_state
 from poly_data.market_selection import calculate_position_sizes, filter_selected_markets
+from logan import Logan
 
 # Note: is accidently removing position bug fixed? 
 def update_positions(avgOnly=False):
@@ -30,20 +31,37 @@ def update_positions(avgOnly=False):
             sell_pending = isinstance(global_state.performing.get(sell_key, set()), set) and len(global_state.performing.get(sell_key, set())) > 0
 
             if buy_pending or sell_pending:
-                print(f"ALERT: Skipping update for {asset} because there are trades pending (buy: {global_state.performing.get(buy_key, set())}, sell: {global_state.performing.get(sell_key, set())})")
+                Logan.log(
+                    f"ALERT: Skipping update for {asset} because there are trades pending (buy: {global_state.performing.get(buy_key, set())}, sell: {global_state.performing.get(sell_key, set())})",
+                    type="warning",
+                    namespace="poly_data.data_utils"
+                )
             else:
                 # Also skip shortly after a local trade update to avoid racing API lag
                 if asset in global_state.last_trade_update and time.time() - global_state.last_trade_update[asset] < 5:
-                    print(f"Skipping update for {asset} because last trade update was less than 5 seconds ago")
+                    Logan.log(
+                        f"Skipping update for {asset} because last trade update was less than 5 seconds ago",
+                        type="info",
+                        namespace="poly_data.data_utils"
+                    )
                 else:
                     try:
                         old_size = position['size']
                     except Exception as e:
-                        print(f"Error getting old position size for {asset}: {e}")
+                        Logan.log(
+                            f"Error getting old position size for {asset}: {e}",
+                            type="error",
+                            namespace="poly_data.data_utils",
+                            exception=e
+                        )
                         old_size = 0
 
                     if old_size != row['size']:
-                        print(f"No trades are pending. Updating position from {old_size} to {row['size']} and avgPrice to {row['avgPrice']} using API")
+                        Logan.log(
+                            f"No trades are pending. Updating position from {old_size} to {row['size']} and avgPrice to {row['avgPrice']} using API",
+                            type="info",
+                            namespace="poly_data.data_utils"
+                        )
 
                     position['size'] = row['size']
     
@@ -55,7 +73,12 @@ def update_liquidity():
     try:
         global_state.available_liquidity = global_state.client.get_usdc_balance()
     except Exception as e:
-        print(f"Error updating liquidity: {e}")
+        Logan.log(
+            f"Error updating liquidity: {e}",
+            type="error",
+            namespace="poly_data.data_utils",
+            exception=e
+        )
         # Keep previous value if update fails
 
 def get_total_balance():
@@ -82,7 +105,12 @@ def get_total_balance():
         global_state.total_balance = total
         return total
     except Exception as e:
-        print(f"Error calculating total balance: {e}")
+        Logan.log(
+            f"Error calculating total balance: {e}",
+            type="error",
+            namespace="poly_data.data_utils",
+            exception=e
+        )
         return None
 
 def get_position(token):
@@ -127,7 +155,11 @@ def set_position(token, side, size, price, source='websocket'):
     else:
         global_state.positions[token] = {'size': size, 'avgPrice': price}
 
-    print(f"Updated position from {source}, set to ", global_state.positions[token])
+    Logan.log(
+        f"Updated position from {source}, set to {global_state.positions[token]}",
+        type="info",
+        namespace="poly_data.data_utils"
+    )
 
 def update_orders():
     all_orders = global_state.client.get_all_orders()
@@ -151,7 +183,11 @@ def update_orders():
                         curr = sel_orders[type]
 
                         if len(curr) > 1:
-                            print("Multiple orders found, cancelling")
+                            Logan.log(
+                                "Multiple orders found, cancelling",
+                                type="warning",
+                                namespace="poly_data.data_utils"
+                            )
                             global_state.client.cancel_all_asset(token)
                             orders[str(token)] = {'buy': {'price': 0, 'size': 0}, 'sell': {'price': 0, 'size': 0}}
                         elif len(curr) == 1:
@@ -182,7 +218,11 @@ def set_order(token, side, size, price):
     curr[side]['price'] = float(price)
 
     global_state.orders[str(token)] = curr
-    print("Updated order, set to ", curr)
+    Logan.log(
+        f"Updated order, set to {curr}",
+        type="info",
+        namespace="poly_data.data_utils"
+    )
 
     
 

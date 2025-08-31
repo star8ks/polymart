@@ -2,9 +2,14 @@ import json
 from poly_utils.google_utils import get_spreadsheet
 import pandas as pd 
 import os
+from logan import Logan
 
 def pretty_print(txt, dic):
-    print("\n", txt, json.dumps(dic, indent=4))
+    Logan.log(
+        f"{txt}: {json.dumps(dic, indent=4)}",
+        type="debug",
+        namespace="poly_data.utils"
+    )
 
 def get_sheet_df(read_only=None):
     """
@@ -21,12 +26,20 @@ def get_sheet_df(read_only=None):
         creds_file = 'credentials.json' if os.path.exists('credentials.json') else '../credentials.json'
         read_only = not os.path.exists(creds_file)
         if read_only:
-            print("No credentials found, using read-only mode")
+            Logan.log(
+                "No credentials found, using read-only mode",
+                type="info",
+                namespace="poly_data.utils"
+            )
 
     try:
         spreadsheet = get_spreadsheet(read_only=read_only)
     except FileNotFoundError:
-        print("No credentials found, falling back to read-only mode")
+        Logan.log(
+            "No credentials found, falling back to read-only mode",
+            type="info",
+            namespace="poly_data.utils"
+        )
         spreadsheet = get_spreadsheet(read_only=True)
 
     wk = spreadsheet.worksheet(vol)

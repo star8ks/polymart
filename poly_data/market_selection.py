@@ -13,12 +13,13 @@ from dataclasses import dataclass
 import pandas as pd
 import poly_data.global_state as global_state
 import numpy as np
+from logan import Logan
 
 
 INVESTMENT_CEILING = 2000
 MAX_POSITION_MULT = 3
-BUDGET_MULT = 3
-MARKET_COUNT = 30
+BUDGET_MULT = 0.5
+MARKET_COUNT = 10
 
 @dataclass
 class PositionSizeResult:
@@ -69,7 +70,12 @@ def calculate_position_sizes():
     try:
         global_state.market_position_sizes = redistribute_for_bounds(global_state.market_position_sizes, floors, ceilings)
     except Exception as e:
-        print(f"Error redistributing for bounds: {e}")
+        Logan.log(
+            f"Error redistributing for bounds: {e}",
+            type="error",
+            namespace="poly_data.market_selection",
+            exception=e
+        )
         global_state.market_position_sizes = filter_out_outbound_markets(global_state.market_position_sizes, floors, ceilings)
         
 def filter_out_outbound_markets(position_sizes: dict[str, PositionSizeResult], floors: dict[str, float], ceilings: dict[str, float]):

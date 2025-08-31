@@ -2,9 +2,9 @@ import gc                       # Garbage collection
 import os                       # Operating system interface
 import json                     # JSON handling
 import asyncio                  # Asynchronous I/O
-import traceback                # Exception handling
 import pandas as pd             # Data analysis library
 import math                     # Mathematical functions
+from logan import Logan         # Logging
 
 import poly_data.global_state as global_state
 import poly_data.CONSTANTS as CONSTANTS
@@ -49,10 +49,10 @@ def send_buy_order(order):
     )
     
     if should_cancel and (existing_buy_size > 0 or order['orders']['sell']['size'] > 0):
-        print(f"Cancelling buy orders - price diff: {price_diff:.4f}, size diff: {size_diff:.1f}")
+        Logan.log(f"Cancelling buy orders - price diff: {price_diff:.4f}, size diff: {size_diff:.1f}", type="info", namespace="trading")
         client.cancel_all_asset(order['token'])
     elif not should_cancel:
-        print(f"Keeping existing buy orders - minor changes: price diff: {price_diff:.4f}, size diff: {size_diff:.1f}")
+        Logan.log(f"Keeping existing buy orders - minor changes: price diff: {price_diff:.4f}, size diff: {size_diff:.1f}", type="info", namespace="trading")
         return  # Don't place new order if existing one is fine
 
     # Calculate minimum acceptable price based on market spread
@@ -67,8 +67,6 @@ def send_buy_order(order):
     if trade:
         # Only place orders with prices between 0.1 and 0.9 to avoid extreme positions
         if order['price'] >= 0.1 and order['price'] < 0.9:
-            # print(f'Creating new order for {order["size"]} at {order["price"]}')
-            # print(order['token'], 'BUY', order['price'], order['size'])
             client.create_order(
                 order['token'], 
                 'BUY', 
@@ -77,9 +75,9 @@ def send_buy_order(order):
                 True if order['neg_risk'] == 'TRUE' else False
             )
         else:
-            print("Not creating buy order because its outside acceptable price range (0.1-0.9)")
+            Logan.log("Not creating buy order because its outside acceptable price range (0.1-0.9)", type="warning", namespace="trading")
     else:
-        print(f'Not creating new order because order price of {order["price"]} is less than incentive start price of {incentive_start}. Mid price is {order["mid_price"]}')
+        Logan.log(f'Not creating new order because order price of {order["price"]} is less than incentive start price of {incentive_start}. Mid price is {order["mid_price"]}', type="info", namespace="trading")
 
 
 def send_sell_order(order):
@@ -110,13 +108,13 @@ def send_sell_order(order):
     )
     
     if should_cancel and (existing_sell_size > 0 or order['orders']['buy']['size'] > 0):
-        print(f"Cancelling sell orders - price diff: {price_diff:.4f}, size diff: {size_diff:.1f}")
+        Logan.log(f"Cancelling sell orders - price diff: {price_diff:.4f}, size diff: {size_diff:.1f}", type="info", namespace="trading")
         client.cancel_all_asset(order['token'])
     elif not should_cancel:
-        print(f"Keeping existing sell orders - minor changes: price diff: {price_diff:.4f}, size diff: {size_diff:.1f}")
+        Logan.log(f"Keeping existing sell orders - minor changes: price diff: {price_diff:.4f}, size diff: {size_diff:.1f}", type="info", namespace="trading")
         return  # Don't place new order if existing one is fine
 
-    print(f'Creating new sell order for {order["size"]} at {order["price"]}')
+    Logan.log(f'Creating new sell order for {order["size"]} at {order["price"]}', type="info", namespace="trading")
     client.create_order(
         order['token'], 
         'SELL', 
@@ -154,7 +152,7 @@ async def perform_trade(market):
 
             # Skip trading if market is not in selected markets (filtered out)
             if row is None:
-                print(f"Market {market} not found in active markets, skipping")
+                Logan.log(f"Market {market} not found in active markets, skipping", type="warning", namespace="trading")
                 return
             
             # Check if market is in positions but not in selected markets (sell-only mode to free up capital)
@@ -167,7 +165,6 @@ async def perform_trade(market):
             # Also sell if we have used most of our budget
             total_balance = get_total_balance()
             if global_state.available_liquidity < total_balance * (1 - SELL_ONLY_THRESHOLD):
-                print(f"Selling only because available liquidity {global_state.available_liquidity} is less than {total_balance * (1 - SELL_ONLY_THRESHOLD)}")
                 sell_only = True
             
             # Determine decimal precision from tick size
@@ -182,7 +179,6 @@ async def perform_trade(market):
                 {'name': 'token1', 'token': row['token1'], 'answer': row['answer1']}, 
                 {'name': 'token2', 'token': row['token2'], 'answer': row['answer2']}
             ]
-            # print(f"\n\n{pd.Timestamp.utcnow().tz_localize(None)}: {row['question']}")
 
             # Get current positions for both outcomes
             pos_1 = get_position(row['token1'])['size']
@@ -200,15 +196,14 @@ async def perform_trade(market):
                 pos_2_raw = client.get_position(row['token2'])[0]
                 amount_to_merge_raw = min(pos_1_raw, pos_2_raw)
 
-                print(f"Position 1 is of size {pos_1_raw} and Position 2 is of size {pos_2_raw}. Merging positions")
+                Logan.log(f"Position 1 is of size {pos_1_raw} and Position 2 is of size {pos_2_raw}. Merging positions", type="info", namespace="trading")
                 # Execute the merge operation
-                print(f"Merging {amount_to_merge_raw} of {row['token1']} and {row['token2']}")
+                Logan.log(f"Merging {amount_to_merge_raw} of {row['token1']} and {row['token2']}", type="info", namespace="trading")
 
                 try:
                     client.merge_positions(amount_to_merge_raw, market, row['neg_risk'] == 'TRUE')
                 except Exception as e:
-                    print(f"Error merging {amount_to_merge_raw} positions for market {market}: {e}")
-                    traceback.print_exc()
+                    Logan.log(f"Error merging {amount_to_merge_raw} positions for market {market}: {e}", type="error", namespace="trading", exception=e)
                 
                 # TODO: for now, let it get updated by the background task
                 # Update our local position tracking
@@ -252,14 +247,14 @@ async def perform_trade(market):
                 try:
                     overall_ratio = (deets['bid_sum_within_n_percent']) / (deets['ask_sum_within_n_percent'])
                 except Exception as e:
-                    print(f"Error calculating overall liquidity ratio for {detail['name']}: using default value 0")
+                    Logan.log(f"Error calculating overall liquidity ratio for {detail['name']}: using default value 0", type="error", namespace="trading")
                     overall_ratio = 0
 
                 try:
                     second_best_bid = round(second_best_bid, round_length)
                     second_best_ask = round(second_best_ask, round_length)
                 except Exception as e:
-                    print(f"Error rounding second best prices for {detail['name']}: {e}")
+                    Logan.log(f"Error rounding second best prices for {detail['name']}: {e}", type="error", namespace="trading", exception=e)
                 
                 top_bid = round(top_bid, round_length)
                 top_ask = round(top_ask, round_length)
@@ -284,7 +279,6 @@ async def perform_trade(market):
                 mid_price = (top_bid + top_ask) / 2
                 
                 # Log market conditions for this outcome
-                # print(f"\nFor {detail['answer']}. Orders: {orders} Position: {position}, "
                 #       f"avgPrice: {avgPrice}, Best Bid: {best_bid}, Best Ask: {best_ask}, "
                 #       f"Bid Price: {bid_price}, Ask Price: {ask_price}, Mid Price: {mid_price}")
 
@@ -310,7 +304,6 @@ async def perform_trade(market):
                     'row': row
                 }
             
-                # print(f"Position: {position}, Other Position: {other_position}, "
                 #       f"Trade Size: {trade_size}, Max Size: {max_size}, "
                 #       f"buy_amount: {buy_amount}, sell_amount: {sell_amount}")
 
@@ -329,7 +322,7 @@ async def perform_trade(market):
                 if sell_amount > 0:
                     # Skip if we have no average price (no real position)
                     if avgPrice == 0:
-                        print("Avg Price is 0. Skipping")
+                        Logan.log("Avg Price is 0. Skipping", type="warning", namespace="trading")
                         continue
 
                     order['size'] = sell_amount
@@ -345,7 +338,6 @@ async def perform_trade(market):
                     # Calculate current profit/loss on position
                     pnl = (mid_price - avgPrice) / avgPrice * 100
 
-                    # print(f"Mid Price: {mid_price}, Spread: {spread}, PnL: {pnl}")
                     
                     # Prepare risk details for tracking
                     risk_details = {
@@ -356,7 +348,7 @@ async def perform_trade(market):
                     try:
                         ratio = (n_deets['bid_sum_within_n_percent']) / (n_deets['ask_sum_within_n_percent'])
                     except Exception as e:
-                        print(f"Error calculating fresh liquidity ratio for {detail['name']} during sell logic: using default value 0")
+                        Logan.log(f"Error calculating fresh liquidity ratio for {detail['name']} during sell logic: using default value 0", type="error", namespace="trading")
                         ratio = 0
 
                     pos_to_sell = sell_amount  # Amount to sell in risk-off scenario
@@ -368,7 +360,6 @@ async def perform_trade(market):
                     if sell_only or (pnl < params['stop_loss_threshold'] and spread <= params['spread_threshold']) or row['3_hour'] > params['volatility_threshold']:
                         risk_details['msg'] = (f"Selling {pos_to_sell} because spread is {spread} and pnl is {pnl} "
                                               f"and ratio is {ratio} and 3 hour volatility is {row['3_hour']}, and sell_only is {sell_only}")
-                        # print("Stop loss Triggered: ", risk_details['msg'])
 
                         # Sell at market best bid to ensure execution
                         order['size'] = pos_to_sell
@@ -417,17 +408,13 @@ async def perform_trade(market):
 
                         if current_time < start_trading_at:
                             send_buy = False
-                            print(f"Not sending a buy order because recently risked off. "
-                                 f"Risked off at {risk_details['time']}")
+                            Logan.log(f"Not sending a buy order because recently risked off. ", type="info", namespace="trading")
 
                     # Only proceed if we're not in risk-off period
                     if send_buy:
                         # TODO: This doesn't make much sense to me, return to it. Probably we don't really need it with the automated market selection
                         # Don't buy if volatility is high or price is far from reference
                         # if row['3_hour'] > params['volatility_threshold'] or price_change >= 0.05:
-                        #     print(f'3 Hour Volatility of {row["3_hour"]} is greater than max volatility of '
-                        #           f'{params["volatility_threshold"]} or price of {order["price"]} is outside '
-                        #           f'0.05 of {sheet_value}. Cancelling all orders')
                         #     client.cancel_all_asset(order['token'])
                         # else:
 
@@ -437,9 +424,7 @@ async def perform_trade(market):
 
                         # If we have significant opposing position, and box sum guard fails, don't buy more
                         if rev_pos['size'] > row['min_size'] and order['price'] + rev_pos['avgPrice'] >= 0.99:
-                            # print("Bypassing creation of new buy order because there is a reverse position")
                             if orders['buy']['size'] > CONSTANTS.MIN_MERGE_SIZE:
-                                # print("Cancelling buy orders because there is a reverse position")
                                 client.cancel_all_asset(order['token'])
                             
                             continue
@@ -447,26 +432,23 @@ async def perform_trade(market):
                         # Check market buy/sell volume ratio
                         if overall_ratio < 0:
                             send_buy = False
-                            # print(f"Not sending a buy order because overall ratio is {overall_ratio}")
                             client.cancel_all_asset(order['token'])
                         else:
                             # Place new buy order if any of these conditions are met:
                             # 1. We can get a better price than current order
                             if best_bid > orders['buy']['price']:
-                                print(f"Sending Buy Order for {token} because better price. "
-                                        f"Orders look like this: {orders['buy']}. Best Bid: {best_bid}")
+                                Logan.log(f"Sending Buy Order for {token} because better price. ", type="info", namespace="trading")
                                 send_buy_order(order)
                             # 2. Current position + orders is not enough to reach max_size
                             elif position + orders['buy']['size'] < max_size:
-                                print(f"Sending Buy Order for {token} because not enough position + size")
+                                Logan.log(f"Sending Buy Order for {token} because not enough position + size", type="info", namespace="trading")
                                 send_buy_order(order)
                             # 3. Our current order is too large and needs to be resized
                             elif orders['buy']['size'] > order['size'] * 1.01:
-                                print(f"Resending buy orders because open orders are too large")
+                                Logan.log(f"Resending buy orders because open orders are too large", type="info", namespace="trading")
                                 send_buy_order(order)
                             # Commented out logic for cancelling orders when market conditions change
                             # elif best_bid_size < orders['buy']['size'] * 0.98 and abs(best_bid - second_best_bid) > 0.03:
-                            #     print(f"Cancelling buy orders because best size is less than 90% of open orders and spread is too large")
                             #     global_state.client.cancel_all_asset(order['token'])
                         
                 # ------- TAKE PROFIT / SELL ORDER MANAGEMENT -------            
@@ -486,26 +468,21 @@ async def perform_trade(market):
                     # Update sell order if:
                     # 1. Current order price is significantly different from target
                     if diff > 2:
-                        print(f"Sending Sell Order for {token} because better current order price of "
-                              f"{order_price} is deviant from the tp_price of {tp_price} and diff is {diff}")
+                        Logan.log(f"Sending Sell Order for {token} because better current order price of ", type="info", namespace="trading")
                         send_sell_order(order)
                     # 2. Current order size is too small for our position
                     elif orders['sell']['size'] < position * 0.97:
-                        print(f"Sending Sell Order for {token} because not enough sell size. "
-                              f"Position: {position}, Sell Size: {orders['sell']['size']}")
+                        Logan.log(f"Sending Sell Order for {token} because not enough sell size. ", type="info", namespace="trading")
                         send_sell_order(order)
                     
                     # Commented out additional conditions for updating sell orders
                     # elif orders['sell']['price'] < ask_price:
-                    #     print(f"Updating Sell Order for {token} because its not at the right price")
                     #     send_sell_order(order)
                     # elif best_ask_size < orders['sell']['size'] * 0.98 and abs(best_ask - second_best_ask) > 0.03...:
-                    #     print(f"Cancelling sell orders because best size is less than 90% of open orders...")
                     #     send_sell_order(order)
 
         except Exception as ex:
-            print(f"Critical error in perform_trade function for market {market} ({row.get('question', 'unknown question') if 'row' in locals() else 'unknown question'}): {ex}")
-            traceback.print_exc()
+            Logan.log(f"Critical error in perform_trade function for market {market} ({row.get('question', 'unknown question') if 'row' in locals() else 'unknown question'}): {ex}", type="error", namespace="trading", exception=ex)
 
         # Clean up memory and introduce a small delay
         gc.collect()

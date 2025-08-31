@@ -14,6 +14,7 @@ import requests                     # HTTP requests
 import pandas as pd                 # Data analysis
 import json                         # JSON processing
 import subprocess                   # For calling external processes
+from logan import Logan
 
 from py_clob_client.clob_types import OpenOrderParams
 
@@ -50,8 +51,12 @@ class PolymarketClient:
         key=os.getenv("PK")
         browser_address = os.getenv("BROWSER_ADDRESS")
 
-        # Don't print sensitive wallet information
-        print("Initializing Polymarket client...")
+        # Don't log sensitive wallet information
+        Logan.log(
+            "Initializing Polymarket client...",
+            type="info",
+            namespace="poly_data.polymarket_client"
+        )
         chain_id=POLYGON
         self.browser_wallet=Web3.to_checksum_address(browser_address)
 
@@ -133,7 +138,12 @@ class PolymarketClient:
             resp = self.client.post_order(signed_order)
             return resp
         except Exception as ex:
-            print(f"Error posting order for token {marketId} ({action} {size} @ {price}): {ex}")
+            Logan.log(
+                f"Error posting order for token {marketId} ({action} {size} @ {price}): {ex}",
+                type="error",
+                namespace="poly_data.polymarket_client",
+                exception=ex
+            )
             return {}
 
     def get_order_book(self, market):
@@ -302,17 +312,29 @@ class PolymarketClient:
 
         # Prepare the command to run the JavaScript script
         node_command = f'node poly_merger/merge.js {amount_to_merge_str} {condition_id} {"true" if is_neg_risk_market else "false"}'
-        print(node_command)
+        Logan.log(
+            f"Running merge command: {node_command}",
+            type="info",
+            namespace="poly_data.polymarket_client"
+        )
 
         # Run the command and capture the output
         result = subprocess.run(node_command, shell=True, capture_output=True, text=True)
         
         # Check if there was an error
         if result.returncode != 0:
-            print("Error:", result.stderr)
+            Logan.log(
+                f"Error in merging positions: {result.stderr}",
+                type="error",
+                namespace="poly_data.polymarket_client"
+            )
             raise Exception(f"Error in merging positions: {result.stderr}")
         
-        print("Done merging")
+        Logan.log(
+            "Done merging",
+            type="info",
+            namespace="poly_data.polymarket_client"
+        )
 
         # Return the transaction hash or output
         return result.stdout

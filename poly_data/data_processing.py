@@ -7,6 +7,7 @@ from trading import perform_trade
 import time 
 import asyncio
 from poly_data.data_utils import set_position, set_order, update_positions
+from logan import Logan
 
 def process_book_data(asset, json_data):
     global_state.all_data[asset] = {
@@ -92,7 +93,11 @@ def process_user_data(rows):
                 is_user_maker = False
                 for maker_order in row['maker_orders']:
                     if maker_order['maker_address'].lower() == global_state.client.browser_wallet.lower():
-                        print("User is maker")
+                        Logan.log(
+                            "User is maker",
+                            type="info",
+                            namespace="poly_data.data_processing"
+                        )
                         size = float(maker_order['matched_amount'])
                         price = float(maker_order['price'])
                         
@@ -107,43 +112,99 @@ def process_user_data(rows):
                 if not is_user_maker:
                     size = float(row['size'])
                     price = float(row['price'])
-                    print("User is taker")
+                    Logan.log(
+                        "User is taker",
+                        type="info",
+                        namespace="poly_data.data_processing"
+                    )
 
-                print("TRADE EVENT FOR: ", row['market'], "ID: ", row['id'], "STATUS: ", row['status'], " SIDE: ", row['side'], "  MAKER OUTCOME: ", maker_outcome, " TAKER OUTCOME: ", taker_outcome, " PROCESSED SIDE: ", side, " SIZE: ", size) 
+                Logan.log(
+                    f"TRADE EVENT FOR: {row['market']}, ID: {row['id']}, STATUS: {row['status']}, SIDE: {row['side']}, MAKER OUTCOME: {maker_outcome}, TAKER OUTCOME: {taker_outcome}, PROCESSED SIDE: {side}, SIZE: {size}",
+                    type="info",
+                    namespace="poly_data.data_processing"
+                ) 
 
 
                 if row['status'] == 'CONFIRMED' or row['status'] == 'FAILED' :
                     if row['status'] == 'FAILED':
-                        print(f"Trade failed for {token}, decreasing")
+                        Logan.log(
+                            f"Trade failed for {token}, decreasing",
+                            type="error",
+                            namespace="poly_data.data_processing"
+                        )
                         asyncio.create_task(asyncio.sleep(2))
                         update_positions()
                     else:
                         remove_from_performing(col, row['id'])
-                        print("Confirmed. Performing is ", len(global_state.performing[col]))
-                        print("Last trade update is ", global_state.last_trade_update)
-                        print("Performing is ", global_state.performing)
-                        print("Performing timestamps is ", global_state.performing_timestamps)
+                        Logan.log(
+                            f"Confirmed. Performing is {len(global_state.performing[col])}",
+                            type="info",
+                            namespace="poly_data.data_processing"
+                        )
+                        Logan.log(
+                            f"Last trade update is {global_state.last_trade_update}",
+                            type="debug",
+                            namespace="poly_data.data_processing"
+                        )
+                        Logan.log(
+                            f"Performing is {global_state.performing}",
+                            type="debug",
+                            namespace="poly_data.data_processing"
+                        )
+                        Logan.log(
+                            f"Performing timestamps is {global_state.performing_timestamps}",
+                            type="debug",
+                            namespace="poly_data.data_processing"
+                        )
                         
                         asyncio.create_task(perform_trade(market))
 
                 elif row['status'] == 'MATCHED':
                     add_to_performing(col, row['id'])
 
-                    print("Matched. Performing is ", len(global_state.performing[col]))
+                    Logan.log(
+                        f"Matched. Performing is {len(global_state.performing[col])}",
+                        type="info",
+                        namespace="poly_data.data_processing"
+                    )
                     set_position(token, side, size, price)
-                    print("Position after matching is ", global_state.positions[str(token)])
-                    print("Last trade update is ", global_state.last_trade_update)
-                    print("Performing is ", global_state.performing)
-                    print("Performing timestamps is ", global_state.performing_timestamps)
+                    Logan.log(
+                        f"Position after matching is {global_state.positions[str(token)]}",
+                        type="info",
+                        namespace="poly_data.data_processing"
+                    )
+                    Logan.log(
+                        f"Last trade update is {global_state.last_trade_update}",
+                        type="debug",
+                        namespace="poly_data.data_processing"
+                    )
+                    Logan.log(
+                        f"Performing is {global_state.performing}",
+                        type="debug",
+                        namespace="poly_data.data_processing"
+                    )
+                    Logan.log(
+                        f"Performing timestamps is {global_state.performing_timestamps}",
+                        type="debug",
+                        namespace="poly_data.data_processing"
+                    )
                     asyncio.create_task(perform_trade(market))
                 elif row['status'] == 'MINED':
                     remove_from_performing(col, row['id'])
 
             elif row['event_type'] == 'order':
-                print("ORDER EVENT FOR: ", row['market'], " STATUS: ",  row['status'], " TYPE: ", row['type'], " SIDE: ", side, "  ORIGINAL SIZE: ", row['original_size'], " SIZE MATCHED: ", row['size_matched'])
+                Logan.log(
+                    f"ORDER EVENT FOR: {row['market']}, STATUS: {row['status']}, TYPE: {row['type']}, SIDE: {side}, ORIGINAL SIZE: {row['original_size']}, SIZE MATCHED: {row['size_matched']}",
+                    type="info",
+                    namespace="poly_data.data_processing"
+                )
                 
                 set_order(token, side, float(row['original_size']) - float(row['size_matched']), row['price'])
                 asyncio.create_task(perform_trade(market))
 
     else:
-        print(f"User date received for {market} but its not in")
+        Logan.log(
+            f"User data received for {market} but its not in reverse tokens",
+            type="warning",
+            namespace="poly_data.data_processing"
+        )

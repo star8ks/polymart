@@ -4,7 +4,7 @@ from data_updater.trading_utils import get_clob_client
 from data_updater.google_utils import get_spreadsheet
 from data_updater.find_markets import get_sel_df, get_all_markets, get_all_results, get_markets, add_volatility_to_df
 from gspread_dataframe import set_with_dataframe
-import traceback
+from logan import Logan
 
 # Initialize global variables
 spreadsheet = get_spreadsheet()
@@ -88,13 +88,29 @@ def fetch_and_process_data():
 
 
     all_df = get_all_markets(client)
-    print("Got all Markets")
+    Logan.log(
+        "Got all Markets",
+        type="info",
+        namespace="update_markets"
+    )
     all_results = get_all_results(all_df, client)
-    print("Got all Results")
+    Logan.log(
+        "Got all Results",
+        type="info",
+        namespace="update_markets"
+    )
     m_data, all_markets = get_markets(all_results, sel_df, maker_reward=0.75)
-    print("Got all orderbook")
+    Logan.log(
+        "Got all orderbook",
+        type="info",
+        namespace="update_markets"
+    )
 
-    print(f'{pd.to_datetime("now")}: Fetched all markets data of length {len(all_markets)}.')
+    Logan.log(
+        f'{pd.to_datetime("now")}: Fetched all markets data of length {len(all_markets)}.',
+        type="info",
+        namespace="update_markets"
+    )
     new_df = add_volatility_to_df(all_markets)
     new_df['volatility_sum'] =  new_df['24_hour'] + new_df['7_day'] + new_df['14_day']
     
@@ -115,14 +131,22 @@ def fetch_and_process_data():
     new_df = new_df.sort_values('attractiveness_score', ascending=False)
     
 
-    print(f'{pd.to_datetime("now")}: Fetched select market of length {len(new_df)}.')
+    Logan.log(
+        f'{pd.to_datetime("now")}: Fetched select market of length {len(new_df)}.',
+        type="info",
+        namespace="update_markets"
+    )
 
     if len(new_df) > 50:
         update_sheet(new_df, wk_all)
         update_sheet(volatility_df, wk_vol)
         update_sheet(m_data, wk_full)
     else:
-        print(f'{pd.to_datetime("now")}: Not updating sheet because of length {len(new_df)}.')
+        Logan.log(
+            f'{pd.to_datetime("now")}: Not updating sheet because of length {len(new_df)}.',
+            type="warning",
+            namespace="update_markets"
+        )
 
 if __name__ == "__main__":
     while True:
@@ -130,5 +154,9 @@ if __name__ == "__main__":
             fetch_and_process_data()
             time.sleep(60 * 60)  # Sleep for an hour
         except Exception as e:
-            print(f"Error in market data update loop: {e}")
-            traceback.print_exc()
+            Logan.log(
+                f"Error in market data update loop",
+                type="error",
+                namespace="update_markets",
+                exception=e
+            )

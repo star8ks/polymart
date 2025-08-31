@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import requests
 import re
+from logan import Logan
 
 
 def get_spreadsheet(read_only=False):
@@ -72,7 +73,12 @@ class ReadOnlyWorksheet:
             return df.to_dict('records')
             
         except Exception as e:
-            print(f"Error in get_all_records for Google Sheet '{self.title}': {e}")
+            Logan.log(
+                f"Error in get_all_records for Google Sheet '{self.title}': {e}",
+                type="error",
+                namespace="data_updater.google_utils",
+                exception=e
+            )
             return []
     
     def get_all_values(self):
@@ -92,5 +98,10 @@ class ReadOnlyWorksheet:
             return headers + data
             
         except Exception as e:
-            print(f"Error in get_all_values for Google Sheet '{self.title}': {e}")
+            Logan.log(
+                f"Error in get_all_values for Google Sheet '{self.title}': {e}",
+                type="error",
+                namespace="data_updater.google_utils",
+                exception=e
+            )
             return []

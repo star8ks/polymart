@@ -1,8 +1,9 @@
 import gc                      # Garbage collection
 import time                    # Time functions
 import asyncio                 # Asynchronous I/O
-import traceback               # Exception handling
 import threading               # Thread management
+from logan import Logan
+
 
 from poly_data.polymarket_client import PolymarketClient
 from poly_data.data_utils import update_markets, update_positions, update_orders, update_liquidity
@@ -36,15 +37,12 @@ def remove_from_pending():
                 try:
                     # If trade has been pending for more than 15 seconds, remove it
                     if current_time - global_state.performing_timestamps[col].get(trade_id, current_time) > 15:
-                        print(f"Removing stale entry {trade_id} from {col} after 15 seconds")
+                        Logan.log(f"Removing stale entry {trade_id} from {col} after 15 seconds", type="info", namespace="cleanup")
                         remove_from_performing(col, trade_id)
-                        print("After removing: ", global_state.performing, global_state.performing_timestamps)
                 except Exception as e:
-                    print(f"Error removing stale trade {trade_id} from {col}: {e}")
-                    print(traceback.format_exc())                
+                    Logan.log(f"Error removing stale trade {trade_id} from {col}: {e}", type="error", namespace="cleanup", exception=e)
     except Exception as e:
-        print(f"Error in remove_from_pending function while cleaning stale trades: {e}")
-        print(traceback.format_exc())
+        Logan.log(f"Error in remove_from_pending function while cleaning stale trades: {e}", type="error", namespace="cleanup", exception=e)
 
 def update_periodically():
     """
@@ -73,23 +71,25 @@ def update_periodically():
             gc.collect()  # Force garbage collection to free memory
             i += 1
         except Exception as e:
-            print(f"Error in update_periodically background thread (cycle {i}): {e}")
-            print(traceback.format_exc())
+            Logan.log(f"Error in update_periodically background thread (cycle {i}): {e}", type="error", namespace="updater", exception=e)
             
 async def main():
     """
     Main application entry point. Initializes client, data, and manages websocket connections.
     """
+
+    Logan.init()
+    time.sleep(3)
+
     # Initialize client
     global_state.client = PolymarketClient()
     
     # Initialize state and fetch initial data
     global_state.all_tokens = []
     update_once()
-    print("After initial updates: ", global_state.orders, global_state.positions)
+    Logan.log(f"After initial updates: orders={global_state.orders}, positions={global_state.positions}", type="info", namespace="init")
 
-    print("\n")
-    print(f'There are {len(global_state.df)} market, {len(global_state.positions)} positions and {len(global_state.orders)} orders. Starting positions: {global_state.positions}')
+    Logan.log(f'There are {len(global_state.df)} markets, {len(global_state.positions)} positions and {len(global_state.orders)} orders. Starting positions: {global_state.positions}', type="info", namespace="init")
 
     # Start background update thread
     update_thread = threading.Thread(target=update_periodically, daemon=True)
@@ -103,10 +103,9 @@ async def main():
                 connect_market_websocket(global_state.all_tokens), 
                 connect_user_websocket()
             )
-            print("Reconnecting to the websocket")
+            Logan.log("Reconnecting to the websocket", type="info", namespace="websocket")
         except Exception as e:
-            print(f"Error in main websocket connection loop: {e}")
-            print(traceback.format_exc())
+            Logan.log(f"Error in main websocket connection loop: {e}", type="error", namespace="websocket", exception=e)
             
         await asyncio.sleep(1)
         gc.collect()  # Clean up memory
