@@ -114,6 +114,13 @@ def get_position(token):
     else:
         return {'size': 0, 'avgPrice': 0}
 
+def get_question_by_condition_id(condition_id):
+    if global_state.df is not None and len(global_state.df) > 0:
+        matching_market = global_state.df[global_state.df['condition_id'] == str(condition_id)]
+        if len(matching_market) > 0:
+            return matching_market['question'].iloc[0]
+    return 'Unknown'
+
 def set_position(token, side, size, price, source='websocket'):
     token = str(token)
     size = float(size)

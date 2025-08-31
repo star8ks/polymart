@@ -1,9 +1,6 @@
 import threading
 import pandas as pd
 from typing import Dict, Optional
-
-from poly_data.polymarket_client import PolymarketClient
-
 # ============ Market Data ============
 
 # List of all tokens being tracked
@@ -33,7 +30,7 @@ available_liquidity: Optional[float] = None
 # ============ Client & Parameters ============
 
 # Polymarket client instance
-client: PolymarketClient = None
+client = None
 
 # Trading parameters from Google Sheets
 params = {}

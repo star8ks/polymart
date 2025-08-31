@@ -20,6 +20,7 @@ from py_clob_client.clob_types import OpenOrderParams
 
 # Smart contract ABIs
 from poly_data.abis import NegRiskAdapterABI, ConditionalTokenABI, erc20_abi
+from poly_data.data_utils import get_question_by_condition_id
 
 # Load environment variables
 load_dotenv()
@@ -138,7 +139,7 @@ class PolymarketClient:
             return resp
         except Exception as ex:
             Logan.error(
-                f"Error posting order for token {marketId} ({action} {size} @ {price}): {ex}",
+                f"Error posting order for market \"{get_question_by_condition_id(marketId)}\" ({action} {size} @ {price}): {ex}",
                 namespace="poly_data.polymarket_client",
                 exception=ex
             )
