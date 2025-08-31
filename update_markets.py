@@ -2,7 +2,7 @@ import time
 import pandas as pd
 from data_updater.trading_utils import get_clob_client
 from data_updater.google_utils import get_spreadsheet
-from data_updater.find_markets import get_sel_df, get_all_markets, get_all_results, get_markets, add_volatility_to_df
+from data_updater.find_markets import get_all_markets, get_all_results, get_markets, add_volatility_to_df
 from gspread_dataframe import set_with_dataframe
 from logan import Logan
 
@@ -11,9 +11,7 @@ spreadsheet = get_spreadsheet()
 client = get_clob_client()
 
 wk_all = spreadsheet.worksheet("All Markets")
-wk_vol = spreadsheet.worksheet("Volatility Markets")
 
-sel_df = get_sel_df(spreadsheet, "Selected Markets")
 
 def update_sheet(data, worksheet):
     all_values = worksheet.get_all_values()
@@ -81,10 +79,7 @@ def fetch_and_process_data():
     client = get_clob_client()
 
     wk_all = spreadsheet.worksheet("All Markets")
-    wk_vol = spreadsheet.worksheet("Volatility Markets")
-    wk_full = spreadsheet.worksheet("Full Markets")
 
-    sel_df = get_sel_df(spreadsheet, "Selected Markets")
 
 
     all_df = get_all_markets(client)
@@ -97,7 +92,7 @@ def fetch_and_process_data():
         "Got all Results",
         namespace="update_markets"
     )
-    m_data, all_markets = get_markets(all_results, sel_df, maker_reward=0.75)
+    all_markets = get_markets(all_results)
     Logan.info(
         "Got all orderbook",
         namespace="update_markets"
@@ -110,20 +105,13 @@ def fetch_and_process_data():
     new_df = add_volatility_to_df(all_markets)
     new_df['volatility_sum'] =  new_df['24_hour'] + new_df['7_day'] + new_df['14_day']
     
-    new_df = new_df.sort_values('volatility_sum', ascending=True)
     new_df['volatilty/reward'] = ((new_df['gm_reward_per_100'] / new_df['volatility_sum']).round(2)).astype(str)
-
 
     new_df = new_df[['question', 'answer1', 'answer2', 'spread', 'rewards_daily_rate', 'gm_reward_per_100', 'sm_reward_per_100', 'bid_reward_per_100', 'ask_reward_per_100',  'volatility_sum', 'volatilty/reward', 'min_size', '1_hour', '3_hour', '6_hour', '12_hour', '24_hour', '7_day', '30_day',  
                      'best_bid', 'best_ask', 'volatility_price', 'max_spread', 'tick_size', 'depth_yes_in', 'depth_no_in', 'attractiveness_score',
                      'neg_risk',  'market_slug', 'token1', 'token2', 'condition_id']]
 
-    
-    volatility_df = new_df.copy()
-    volatility_df = volatility_df[new_df['volatility_sum'] < 20]
-    # volatility_df = sort_df(volatility_df)
-    volatility_df = volatility_df.sort_values('attractiveness_score', ascending=False)
-   
+    # Sort all markets by attractiveness_score (no filtering)
     new_df = new_df.sort_values('attractiveness_score', ascending=False)
     
 
@@ -134,8 +122,6 @@ def fetch_and_process_data():
 
     if len(new_df) > 50:
         update_sheet(new_df, wk_all)
-        update_sheet(volatility_df, wk_vol)
-        update_sheet(m_data, wk_full)
     else:
         Logan.warn(
             f'{pd.to_datetime("now")}: Not updating sheet because of length {len(new_df)}.',

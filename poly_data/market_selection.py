@@ -14,12 +14,21 @@ import pandas as pd
 import poly_data.global_state as global_state
 import numpy as np
 from logan import Logan
+from poly_data.utils import get_sheet_df
+from poly_utils.google_utils import get_spreadsheet
+from gspread_dataframe import set_with_dataframe
 
 
 INVESTMENT_CEILING = 2000
 MAX_POSITION_MULT = 3
 BUDGET_MULT = 0.5
 MARKET_COUNT = 10
+
+# Filtering parameters
+MAX_VOLATILITY_SUM = 20.0
+MIN_ATTRACTIVENESS_SCORE = 0.0
+MAX_MIDPOINT = 0.90
+MIN_MIDPOINT = 0.10
 
 @dataclass
 class PositionSizeResult:
@@ -36,15 +45,102 @@ class Position:
 
 
 def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Filter and select markets based on various criteria.
+    
+    Applies the following filters in order:
+    1. Volatility filtering (volatility_sum threshold)
+    2. Attractiveness score minimum threshold
+    3. Midpoint range filtering (avoid extreme probabilities)
+    4. Top-N selection by attractiveness_score
+    """
     df = markets_df.copy()
-    if 'attractiveness_score' not in df.columns:
-        raise Exception("attractiveness_score column missing")
-
-    df['attractiveness_score'] = pd.to_numeric(df['attractiveness_score'], errors='coerce')
+    initial_count = len(df)
+    
+    # Ensure required columns exist
+    required_cols = ['attractiveness_score', 'volatility_sum', 'best_bid', 'best_ask']
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    if missing_cols:
+        raise Exception(f"Required columns missing: {missing_cols}")
+    
+    # Convert columns to numeric, handling any string/NaN values
+    for col in ['attractiveness_score', 'volatility_sum', 'best_bid', 'best_ask']:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+    
+    # Calculate midpoint if not already present
+    if 'midpoint' not in df.columns:
+        df['midpoint'] = (df['best_bid'] + df['best_ask']) / 2
+    
+    # 1. Filter by volatility sum
+    if MAX_VOLATILITY_SUM > 0:
+        df = df[df['volatility_sum'] <= MAX_VOLATILITY_SUM]
+        Logan.info(
+            f"After volatility filter (≤{MAX_VOLATILITY_SUM}): {len(df)}/{initial_count} markets",
+            namespace="poly_data.market_selection"
+        )
+    
+    # 2. Filter by minimum attractiveness score
+    if MIN_ATTRACTIVENESS_SCORE > 0:
+        df = df[df['attractiveness_score'] >= MIN_ATTRACTIVENESS_SCORE]
+        Logan.info(
+            f"After attractiveness filter (≥{MIN_ATTRACTIVENESS_SCORE}): {len(df)}/{initial_count} markets",
+            namespace="poly_data.market_selection"
+        )
+    
+    # 3. Filter by midpoint range (avoid extreme probabilities)
+    df = df[(df['midpoint'] >= MIN_MIDPOINT) & (df['midpoint'] <= MAX_MIDPOINT)]
+    Logan.info(
+        f"After midpoint filter ({MIN_MIDPOINT}-{MAX_MIDPOINT}): {len(df)}/{initial_count} markets",
+        namespace="poly_data.market_selection"
+    )
+    
+    # 4. Sort by attractiveness score and take top N
     df_sorted = df.sort_values(by='attractiveness_score', ascending=False, na_position='last')
+    result = df_sorted.head(MARKET_COUNT).reset_index(drop=True)
+    
+    Logan.info(
+        f"Final selection: {len(result)}/{initial_count} markets (top {MARKET_COUNT})",
+        namespace="poly_data.market_selection"
+    )
+    
+    # Write selected markets back to the Selected Markets sheet
+    try:
+        write_selected_markets_to_sheet(result)
+    except Exception as e:
+        Logan.error(
+            f"Failed to write selected markets to sheet: {e}",
+            namespace="poly_data.market_selection",
+            exception=e
+        )
+    
+    return result
 
-    top_n = MARKET_COUNT
-    return df_sorted.head(top_n).reset_index(drop=True)
+
+def write_selected_markets_to_sheet(selected_df: pd.DataFrame):
+    """Write the selected markets to the 'Selected Markets' sheet for visibility"""
+    try:
+        spreadsheet = get_spreadsheet()
+        worksheet = spreadsheet.worksheet("Selected Markets")
+        
+        # Clear existing data and write new selection
+        worksheet.clear()
+        
+        # Select key columns for the sheet
+        output_df = selected_df[['question', 'answer1', 'answer2', 'attractiveness_score', 'volatility_sum', 
+                               'gm_reward_per_100', 'best_bid', 'best_ask', 'token1', 'token2', 'condition_id']].copy()
+        
+        set_with_dataframe(worksheet, output_df, include_index=False, include_column_header=True, resize=True)
+        
+        Logan.info(
+            f"Successfully wrote {len(output_df)} selected markets to Selected Markets sheet",
+            namespace="poly_data.market_selection"
+        )
+    except Exception as e:
+        Logan.error(
+            f"Error writing to Selected Markets sheet: {e}",
+            namespace="poly_data.market_selection", 
+            exception=e
+        )
 
 
 def calculate_position_sizes(): 

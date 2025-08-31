@@ -181,6 +181,13 @@ def get_buy_sell_amount(position, row, force_sell=False):
         buy_amount = row['min_size']
     if sell_amount > 0.7 * row['min_size'] and sell_amount < row['min_size']:
         sell_amount = row['min_size']
+
+    # if we are selling more than we have;
+    if sell_amount > position:
+        if force_sell:
+            sell_amount = position
+        else:
+            sell_amount = 0
     
     if force_sell:
         buy_amount = 0

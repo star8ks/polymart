@@ -20,7 +20,7 @@ from py_clob_client.clob_types import OpenOrderParams
 
 # Smart contract ABIs
 from poly_data.abis import NegRiskAdapterABI, ConditionalTokenABI, erc20_abi
-from poly_data.data_utils import get_question_by_condition_id
+from poly_data.data_utils import get_readable_from_condition_id, get_readable_from_token_id
 
 # Load environment variables
 load_dotenv()
@@ -139,8 +139,8 @@ class PolymarketClient:
             return resp
         except Exception as ex:
             Logan.error(
-                f"Error posting order for market \"{get_question_by_condition_id(marketId)}\" ({action} {size} @ {price}): {ex}",
-                namespace="poly_data.polymarket_client",
+                f"Error posting order for market \"{get_readable_from_token_id(marketId)}\" ({action} {size} @ {price}): {ex}",
+                 namespace="poly_data.polymarket_client",
                 exception=ex
             )
             return {}
@@ -322,7 +322,7 @@ class PolymarketClient:
         # Check if there was an error
         if result.returncode != 0:
             Logan.error(
-                f"Error in merging positions: {result.stderr}",
+                f"Error in merging positions from market {get_readable_from_condition_id(condition_id)}: {result.stderr}",
                 namespace="poly_data.polymarket_client"
             )
             raise Exception(f"Error in merging positions: {result.stderr}")

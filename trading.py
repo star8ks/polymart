@@ -11,7 +11,7 @@ import poly_data.CONSTANTS as CONSTANTS
 
 # Import utility functions for trading
 from poly_data.trading_utils import get_best_bid_ask_deets, get_order_prices, get_buy_sell_amount, round_down, round_up
-from poly_data.data_utils import get_position, get_order, get_question_by_condition_id, get_total_balance, set_position
+from poly_data.data_utils import get_position, get_order, get_readable_from_condition_id, get_total_balance, set_position
 from poly_data.market_selection import get_enhanced_market_row
 
 SELL_ONLY_THRESHOLD = 0.6
@@ -203,7 +203,7 @@ async def perform_trade(market):
                 try:
                     client.merge_positions(amount_to_merge_raw, market, row['neg_risk'] == 'TRUE')
                 except Exception as e:
-                    Logan.error(f"Error merging {amount_to_merge_raw} positions for market \"{get_question_by_condition_id(market)}\": {e}", namespace="trading", exception=e)
+                    Logan.error(f"Error merging {amount_to_merge_raw} positions for market \"{get_readable_from_condition_id(market)}\": {e}", namespace="trading", exception=e)
                 
                 # TODO: for now, let it get updated by the background task
                 # Update our local position tracking
@@ -240,8 +240,8 @@ async def perform_trade(market):
                 top_ask = deets['top_ask']
                 
                 # Round prices to appropriate precision
-                best_bid = round(best_bid, round_length)
-                best_ask = round(best_ask, round_length)
+                best_bid = round(best_bid, round_length) if best_bid is not None else None
+                best_ask = round(best_ask, round_length) if best_ask is not None else None
 
                 # Calculate ratio of buy vs sell liquidity in the market
                 try:
@@ -256,8 +256,8 @@ async def perform_trade(market):
                 except Exception as e:
                     Logan.error(f"Error rounding second best prices for {detail['name']}: {e}", namespace="trading", exception=e)
                 
-                top_bid = round(top_bid, round_length)
-                top_ask = round(top_ask, round_length)
+                top_bid = round(top_bid, round_length) if top_bid is not None else None
+                top_ask = round(top_ask, round_length) if top_ask is not None else None
 
                 # Get our current position and average price
                 pos = get_position(token)

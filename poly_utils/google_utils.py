@@ -72,13 +72,11 @@ class ReadOnlyWorksheet:
             encoded_title = urllib.parse.quote(self.title)
             
             # Map known sheet names to likely GID positions
-            # Based on the sheet order: Full Markets, All Markets, Volatility Markets, Selected Markets, Hyperparameters
+            # Based on the sheet order: All Markets, Selected Markets, Hyperparameters
             sheet_gid_mapping = {
-                'Full Markets': 0,
-                'All Markets': 1, 
-                'Volatility Markets': 2,
-                'Selected Markets': 3,
-                'Hyperparameters': 4
+                'All Markets': 0, 
+                'Selected Markets': 1,
+                'Hyperparameters': 2
             }
             
             # Try multiple URL formats for accessing the sheet

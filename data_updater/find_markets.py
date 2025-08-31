@@ -11,19 +11,6 @@ warnings.filterwarnings("ignore")
 if not os.path.exists('data'):
     os.makedirs('data')
 
-def get_sel_df(spreadsheet, sheet_name='Selected Markets'):
-    try:
-        wk2 = spreadsheet.worksheet(sheet_name)
-        sel_df = pd.DataFrame(wk2.get_all_records())
-        sel_df = sel_df[sel_df['question'] != ""].reset_index(drop=True)
-        return sel_df
-    except Exception as e:
-        Logan.error(
-            f"Error fetching selected markets from sheet '{sheet_name}': {e}",
-            namespace="data_updater.find_markets",
-            exception=e
-        )
-        return pd.DataFrame()
     
 def get_all_markets(client):
     cursor = ""
@@ -226,7 +213,7 @@ def process_single_row(row, client):
 
 
     try:
-        ret['best_bid'] = bids.iloc[-1]['price']
+        ret['best_bid'] = bids.iloc[-1]['price'] if not bids.empty else 0
     except Exception as e:
         Logan.error(
             f"Error getting best bid for token {token1}: {e}",
@@ -236,14 +223,14 @@ def process_single_row(row, client):
         ret['best_bid'] = 0
 
     try:
-        ret['best_ask'] = asks.iloc[-1]['price']
+        ret['best_ask'] = asks.iloc[-1]['price'] if not asks.empty else 1
     except Exception as e:
         Logan.error(
             f"Error getting best ask for token {token1}: {e}",
             namespace="data_updater.find_markets",
             exception=e
         )
-        ret['best_ask'] = 0
+        ret['best_ask'] = 1
 
     ret['midpoint'] = (ret['best_bid'] + ret['best_ask']) / 2
     
@@ -380,18 +367,6 @@ def get_all_results(all_df, client, max_workers=3, batch_size=40):
 
     return all_results
 
-def get_combined_markets(new_df, new_markets, sel_df):
-
-    if len(sel_df) > 0:
-        old_markets = new_df[new_df['question'].isin(sel_df['question'])]
-        all_markets = pd.concat([old_markets, new_markets])
-    else:
-        all_markets = new_markets
-
-    all_markets = all_markets.drop_duplicates('question')
-
-    all_markets = all_markets.sort_values('gm_reward_per_100', ascending=False)
-    return all_markets
 
 import concurrent.futures
 
@@ -478,21 +453,18 @@ def add_volatility_to_df(df, max_workers=2, batch_size=40):
     return pd.DataFrame(results)
 
     
-def get_markets(all_results, sel_df, maker_reward=1):
+def get_markets(all_results):
+    """Process market results and return clean dataframe with all markets"""
     new_df = pd.DataFrame(all_results)
     new_df['spread'] = abs(new_df['best_ask'] - new_df['best_bid'])
-    new_df = new_df.sort_values('rewards_daily_rate', ascending=False)
-    new_df[' '] = ''
-
-    new_df = new_df[['question', 'answer1', 'answer2', 'neg_risk', 'spread', 'best_bid', 'best_ask', 'rewards_daily_rate', 'bid_reward_per_100', 'ask_reward_per_100', 'gm_reward_per_100', 'sm_reward_per_100', 'min_size', 'max_spread', 'tick_size', 'market_slug', 'token1', 'token2', 'condition_id', 'depth_yes_in', 'depth_no_in', 'attractiveness_score']]
-    new_df = new_df.replace([np.inf, -np.inf], 0)
-    all_data = new_df.copy()
-    s_df = new_df.copy()
     
-
-    making_markets = s_df[~new_df['question'].isin(sel_df['question'])]
-    making_markets = making_markets.sort_values('gm_reward_per_100', ascending=False)
-    making_markets = making_markets[making_markets['gm_reward_per_100'] >= maker_reward]
-    all_markets = get_combined_markets(new_df, making_markets, sel_df)    
-
-    return all_data, all_markets
+    # Select and reorder columns
+    new_df = new_df[['question', 'answer1', 'answer2', 'neg_risk', 'spread', 'best_bid', 'best_ask', 'rewards_daily_rate', 'bid_reward_per_100', 'ask_reward_per_100', 'gm_reward_per_100', 'sm_reward_per_100', 'min_size', 'max_spread', 'tick_size', 'market_slug', 'token1', 'token2', 'condition_id', 'depth_yes_in', 'depth_no_in', 'attractiveness_score']]
+    
+    # Clean up infinite values
+    new_df = new_df.replace([np.inf, -np.inf], 0)
+    
+    # Sort by attractiveness score
+    new_df = new_df.sort_values('attractiveness_score', ascending=False)
+    
+    return new_df

@@ -110,14 +110,14 @@ def get_earnings(client):
 
 def update_stats_once(client):
     spreadsheet = get_spreadsheet()
-    wk_full = spreadsheet.worksheet('Full Markets')
+    wk_all = spreadsheet.worksheet('All Markets')
     wk_summary = spreadsheet.worksheet('Summary')
 
 
     wk_sel = spreadsheet.worksheet('Selected Markets')
     selected_df = pd.DataFrame(wk_sel.get_all_records())
     
-    markets_df = get_markets_df(wk_full)
+    markets_df = get_markets_df(wk_all)
     Logan.info(
         "Got spreadsheet...",
         namespace="poly_stats.account_stats"

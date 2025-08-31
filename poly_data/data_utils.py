@@ -114,12 +114,29 @@ def get_position(token):
     else:
         return {'size': 0, 'avgPrice': 0}
 
-def get_question_by_condition_id(condition_id):
+def get_readable_from_condition_id(condition_id) -> str:
     if global_state.df is not None and len(global_state.df) > 0:
         matching_market = global_state.df[global_state.df['condition_id'] == str(condition_id)]
         if len(matching_market) > 0:
             return matching_market['question'].iloc[0]
-    return 'Unknown'
+    Logan.error(
+        f"No matching market found for condition ID {condition_id}, df length: {len(global_state.df)}",
+    )
+    return "Unknown"
+
+def get_readable_from_token_id(token_id) -> str:
+    if global_state.df is not None and len(global_state.df) > 0:
+        matching_market = global_state.df[
+            (global_state.df['token1'] == token_id) | 
+            (global_state.df['token2'] == token_id)
+        ]
+        if len(matching_market) > 0:
+            return matching_market['question'].iloc[0]
+    Logan.error(
+        f"No matching market found for token ID {token_id}, df length: {len(global_state.df)}",
+        namespace="poly_data.data_utils"
+    )
+    return "Unknown"
 
 def set_position(token, side, size, price, source='websocket'):
     token = str(token)

@@ -18,7 +18,6 @@ def get_sheet_df(read_only=None):
         read_only (bool): If None, auto-detects based on credentials availability
     """
     all = 'All Markets'
-    vol = 'Volatility Markets'
 
     # Auto-detect read-only mode if not specified
     if read_only is None:
@@ -39,16 +38,10 @@ def get_sheet_df(read_only=None):
         )
         spreadsheet = get_spreadsheet(read_only=True)
 
-    wk = spreadsheet.worksheet(vol)
-    df = pd.DataFrame(wk.get_all_records())
-    df = df[df['question'] != ""].reset_index(drop=True)
-    df = df[['question']] # so we don't have merge problems
-
-    wk2 = spreadsheet.worksheet(all)
-    df2 = pd.DataFrame(wk2.get_all_records())
-    df2 = df2[df2['question'] != ""].reset_index(drop=True)
-
-    result = df.merge(df2, on='question', how='inner')
+    # Read directly from All Markets - no more filtering at read time
+    wk = spreadsheet.worksheet(all)
+    result = pd.DataFrame(wk.get_all_records())
+    result = result[result['question'] != ""].reset_index(drop=True)
 
     wk_p = spreadsheet.worksheet('Hyperparameters')
     records = wk_p.get_all_records()
