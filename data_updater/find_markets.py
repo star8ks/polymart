@@ -38,7 +38,7 @@ def get_all_markets(client):
             
             all_markets.append(markets_df)
 
-            if cursor is None:
+            if cursor == "LTE=":
                 break
         except Exception as e:
             Logan.error(
