@@ -251,8 +251,8 @@ async def perform_trade(market):
                     overall_ratio = 0
 
                 try:
-                    second_best_bid = round(second_best_bid, round_length)
-                    second_best_ask = round(second_best_ask, round_length)
+                    second_best_bid = round(second_best_bid, round_length) if second_best_bid is not None else None
+                    second_best_ask = round(second_best_ask, round_length) if second_best_ask is not None else None
                 except Exception as e:
                     Logan.error(f"Error rounding second best prices for {detail['name']}: {e}", namespace="trading", exception=e)
                 
