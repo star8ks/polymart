@@ -88,27 +88,23 @@ def fetch_and_process_data():
 
 
     all_df = get_all_markets(client)
-    Logan.log(
+    Logan.info(
         "Got all Markets",
-        type="info",
         namespace="update_markets"
     )
     all_results = get_all_results(all_df, client)
-    Logan.log(
+    Logan.info(
         "Got all Results",
-        type="info",
         namespace="update_markets"
     )
     m_data, all_markets = get_markets(all_results, sel_df, maker_reward=0.75)
-    Logan.log(
+    Logan.info(
         "Got all orderbook",
-        type="info",
         namespace="update_markets"
     )
 
-    Logan.log(
+    Logan.info(
         f'{pd.to_datetime("now")}: Fetched all markets data of length {len(all_markets)}.',
-        type="info",
         namespace="update_markets"
     )
     new_df = add_volatility_to_df(all_markets)
@@ -131,9 +127,8 @@ def fetch_and_process_data():
     new_df = new_df.sort_values('attractiveness_score', ascending=False)
     
 
-    Logan.log(
+    Logan.info(
         f'{pd.to_datetime("now")}: Fetched select market of length {len(new_df)}.',
-        type="info",
         namespace="update_markets"
     )
 
@@ -142,9 +137,8 @@ def fetch_and_process_data():
         update_sheet(volatility_df, wk_vol)
         update_sheet(m_data, wk_full)
     else:
-        Logan.log(
+        Logan.warn(
             f'{pd.to_datetime("now")}: Not updating sheet because of length {len(new_df)}.',
-            type="warning",
             namespace="update_markets"
         )
 
@@ -154,9 +148,8 @@ if __name__ == "__main__":
             fetch_and_process_data()
             time.sleep(60 * 60)  # Sleep for an hour
         except Exception as e:
-            Logan.log(
+            Logan.error(
                 f"Error in market data update loop",
-                type="error",
                 namespace="update_markets",
                 exception=e
             )

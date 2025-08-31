@@ -52,9 +52,8 @@ class PolymarketClient:
         browser_address = os.getenv("BROWSER_ADDRESS")
 
         # Don't log sensitive wallet information
-        Logan.log(
+        Logan.info(
             "Initializing Polymarket client...",
-            type="info",
             namespace="poly_data.polymarket_client"
         )
         chain_id=POLYGON
@@ -138,9 +137,8 @@ class PolymarketClient:
             resp = self.client.post_order(signed_order)
             return resp
         except Exception as ex:
-            Logan.log(
+            Logan.error(
                 f"Error posting order for token {marketId} ({action} {size} @ {price}): {ex}",
-                type="error",
                 namespace="poly_data.polymarket_client",
                 exception=ex
             )
@@ -312,9 +310,8 @@ class PolymarketClient:
 
         # Prepare the command to run the JavaScript script
         node_command = f'node poly_merger/merge.js {amount_to_merge_str} {condition_id} {"true" if is_neg_risk_market else "false"}'
-        Logan.log(
+        Logan.info(
             f"Running merge command: {node_command}",
-            type="info",
             namespace="poly_data.polymarket_client"
         )
 
@@ -323,16 +320,14 @@ class PolymarketClient:
         
         # Check if there was an error
         if result.returncode != 0:
-            Logan.log(
+            Logan.error(
                 f"Error in merging positions: {result.stderr}",
-                type="error",
                 namespace="poly_data.polymarket_client"
             )
             raise Exception(f"Error in merging positions: {result.stderr}")
         
-        Logan.log(
+        Logan.info(
             "Done merging",
-            type="info",
             namespace="poly_data.polymarket_client"
         )
 

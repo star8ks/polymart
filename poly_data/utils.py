@@ -5,9 +5,8 @@ import os
 from logan import Logan
 
 def pretty_print(txt, dic):
-    Logan.log(
+    Logan.debug(
         f"{txt}: {json.dumps(dic, indent=4)}",
-        type="debug",
         namespace="poly_data.utils"
     )
 
@@ -26,18 +25,16 @@ def get_sheet_df(read_only=None):
         creds_file = 'credentials.json' if os.path.exists('credentials.json') else '../credentials.json'
         read_only = not os.path.exists(creds_file)
         if read_only:
-            Logan.log(
+            Logan.info(
                 "No credentials found, using read-only mode",
-                type="info",
                 namespace="poly_data.utils"
             )
 
     try:
         spreadsheet = get_spreadsheet(read_only=read_only)
     except FileNotFoundError:
-        Logan.log(
+        Logan.info(
             "No credentials found, falling back to read-only mode",
-            type="info",
             namespace="poly_data.utils"
         )
         spreadsheet = get_spreadsheet(read_only=True)

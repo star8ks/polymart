@@ -98,9 +98,8 @@ class ReadOnlyWorksheet:
             
             for csv_url in urls_to_try:
                 try:
-                    Logan.log(
+                    Logan.debug(
                         f"Trying to fetch sheet '{self.title}' from: {csv_url}",
-                        type="debug",
                         namespace="poly_utils.google_utils"
                     )
                     response = requests.get(csv_url, timeout=30)
@@ -116,47 +115,41 @@ class ReadOnlyWorksheet:
                         if self.title == 'Hyperparameters':
                             expected_cols = ['type', 'param', 'value']
                             if all(col in df.columns for col in expected_cols):
-                                Logan.log(
+                                Logan.info(
                                     f"Successfully fetched {len(df)} hyperparameter records",
-                                    type="info",
                                     namespace="poly_utils.google_utils"
                                 )
                                 return df.to_dict('records')
                             else:
-                                Logan.log(
+                                Logan.warn(
                                     f"Sheet doesn't match Hyperparameters format. Columns: {list(df.columns)}",
-                                    type="warning",
                                     namespace="poly_utils.google_utils"
                                 )
                                 continue
                         else:
-                            Logan.log(
+                            Logan.info(
                                 f"Successfully fetched {len(df)} records from sheet '{self.title}'",
-                                type="info",
                                 namespace="poly_utils.google_utils"
                             )
                             # Convert to list of dictionaries (same format as gspread)
                             return df.to_dict('records')
                     
                 except Exception as url_error:
-                    Logan.log(
+                    Logan.warn(
                         f"Failed fetching sheet '{self.title}' from URL {csv_url}: {url_error}",
-                        type="warning",
                         namespace="poly_utils.google_utils"
                     )
                     continue
             
-            Logan.log(
+            Logan.error(
                 f"All URL attempts failed for sheet '{self.title}'",
-                type="error",
                 namespace="poly_utils.google_utils"
             )
             return []
             
         except Exception as e:
-            Logan.log(
+            Logan.error(
                 f"Error in get_all_records for Google Sheet '{self.title}': {e}",
-                type="error",
                 namespace="poly_utils.google_utils",
                 exception=e
             )
@@ -179,9 +172,8 @@ class ReadOnlyWorksheet:
             return headers + data
             
         except Exception as e:
-            Logan.log(
+            Logan.error(
                 f"Error in get_all_values for Google Sheet '{self.title}': {e}",
-                type="error",
                 namespace="poly_utils.google_utils",
                 exception=e
             )

@@ -93,9 +93,8 @@ def process_user_data(rows):
                 is_user_maker = False
                 for maker_order in row['maker_orders']:
                     if maker_order['maker_address'].lower() == global_state.client.browser_wallet.lower():
-                        Logan.log(
+                        Logan.info(
                             "User is maker",
-                            type="info",
                             namespace="poly_data.data_processing"
                         )
                         size = float(maker_order['matched_amount'])
@@ -112,48 +111,41 @@ def process_user_data(rows):
                 if not is_user_maker:
                     size = float(row['size'])
                     price = float(row['price'])
-                    Logan.log(
+                    Logan.info(
                         "User is taker",
-                        type="info",
                         namespace="poly_data.data_processing"
                     )
 
-                Logan.log(
+                Logan.info(
                     f"TRADE EVENT FOR: {row['market']}, ID: {row['id']}, STATUS: {row['status']}, SIDE: {row['side']}, MAKER OUTCOME: {maker_outcome}, TAKER OUTCOME: {taker_outcome}, PROCESSED SIDE: {side}, SIZE: {size}",
-                    type="info",
                     namespace="poly_data.data_processing"
                 ) 
 
 
                 if row['status'] == 'CONFIRMED' or row['status'] == 'FAILED' :
                     if row['status'] == 'FAILED':
-                        Logan.log(
+                        Logan.error(
                             f"Trade failed for {token}, decreasing",
-                            type="error",
                             namespace="poly_data.data_processing"
                         )
                         asyncio.create_task(asyncio.sleep(2))
                         update_positions()
                     else:
                         remove_from_performing(col, row['id'])
-                        Logan.log(
+                        Logan.info(
                             f"Confirmed. Performing is {len(global_state.performing[col])}",
-                            type="info",
                             namespace="poly_data.data_processing"
                         )
-                        Logan.log(
+                        Logan.debug(
                             f"Last trade update is {global_state.last_trade_update}",
-                            type="debug",
                             namespace="poly_data.data_processing"
                         )
-                        Logan.log(
+                        Logan.debug(
                             f"Performing is {global_state.performing}",
-                            type="debug",
                             namespace="poly_data.data_processing"
                         )
-                        Logan.log(
+                        Logan.debug(
                             f"Performing timestamps is {global_state.performing_timestamps}",
-                            type="debug",
                             namespace="poly_data.data_processing"
                         )
                         
@@ -162,30 +154,25 @@ def process_user_data(rows):
                 elif row['status'] == 'MATCHED':
                     add_to_performing(col, row['id'])
 
-                    Logan.log(
+                    Logan.info(
                         f"Matched. Performing is {len(global_state.performing[col])}",
-                        type="info",
                         namespace="poly_data.data_processing"
                     )
                     set_position(token, side, size, price)
-                    Logan.log(
+                    Logan.info(
                         f"Position after matching is {global_state.positions[str(token)]}",
-                        type="info",
                         namespace="poly_data.data_processing"
                     )
-                    Logan.log(
+                    Logan.debug(
                         f"Last trade update is {global_state.last_trade_update}",
-                        type="debug",
                         namespace="poly_data.data_processing"
                     )
-                    Logan.log(
+                    Logan.debug(
                         f"Performing is {global_state.performing}",
-                        type="debug",
                         namespace="poly_data.data_processing"
                     )
-                    Logan.log(
+                    Logan.debug(
                         f"Performing timestamps is {global_state.performing_timestamps}",
-                        type="debug",
                         namespace="poly_data.data_processing"
                     )
                     asyncio.create_task(perform_trade(market))
@@ -193,9 +180,8 @@ def process_user_data(rows):
                     remove_from_performing(col, row['id'])
 
             elif row['event_type'] == 'order':
-                Logan.log(
+                Logan.info(
                     f"ORDER EVENT FOR: {row['market']}, STATUS: {row['status']}, TYPE: {row['type']}, SIDE: {side}, ORIGINAL SIZE: {row['original_size']}, SIZE MATCHED: {row['size_matched']}",
-                    type="info",
                     namespace="poly_data.data_processing"
                 )
                 
@@ -203,8 +189,7 @@ def process_user_data(rows):
                 asyncio.create_task(perform_trade(market))
 
     else:
-        Logan.log(
+        Logan.warn(
             f"User data received for {market} but its not in reverse tokens",
-            type="warning",
             namespace="poly_data.data_processing"
         )

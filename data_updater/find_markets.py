@@ -18,9 +18,8 @@ def get_sel_df(spreadsheet, sheet_name='Selected Markets'):
         sel_df = sel_df[sel_df['question'] != ""].reset_index(drop=True)
         return sel_df
     except Exception as e:
-        Logan.log(
+        Logan.error(
             f"Error fetching selected markets from sheet '{sheet_name}': {e}",
-            type="error",
             namespace="data_updater.find_markets",
             exception=e
         )
@@ -42,9 +41,8 @@ def get_all_markets(client):
             if cursor is None:
                 break
         except Exception as e:
-            Logan.log(
+            Logan.error(
                 f"Error fetching market batch with cursor '{cursor}': {e}",
-                type="error",
                 namespace="data_updater.find_markets",
                 exception=e
             )
@@ -211,9 +209,8 @@ def process_single_row(row, client):
     try:
         bids = pd.DataFrame(book.bids).astype(float)
     except Exception as e:
-        Logan.log(
+        Logan.error(
             f"Error processing bids for token {token1}: {e}",
-            type="error",
             namespace="data_updater.find_markets",
             exception=e
         )
@@ -221,9 +218,8 @@ def process_single_row(row, client):
     try:
         asks = pd.DataFrame(book.asks).astype(float)
     except Exception as e:
-        Logan.log(
+        Logan.error(
             f"Error processing asks for token {token1}: {e}",
-            type="error",
             namespace="data_updater.find_markets",
             exception=e
         )
@@ -232,9 +228,8 @@ def process_single_row(row, client):
     try:
         ret['best_bid'] = bids.iloc[-1]['price']
     except Exception as e:
-        Logan.log(
+        Logan.error(
             f"Error getting best bid for token {token1}: {e}",
-            type="error",
             namespace="data_updater.find_markets",
             exception=e
         )
@@ -243,9 +238,8 @@ def process_single_row(row, client):
     try:
         ret['best_ask'] = asks.iloc[-1]['price']
     except Exception as e:
-        Logan.log(
+        Logan.error(
             f"Error getting best ask for token {token1}: {e}",
-            type="error",
             namespace="data_updater.find_markets",
             exception=e
         )
@@ -268,9 +262,8 @@ def process_single_row(row, client):
     try:
         bids_df = bids_df.merge(bids, on='price', how='left').fillna(0)
     except Exception as e:
-        Logan.log(
+        Logan.error(
             f"Error merging bids data for token {token1}: {e}",
-            type="error",
             namespace="data_updater.find_markets",
             exception=e
         )
@@ -279,9 +272,8 @@ def process_single_row(row, client):
     try:
         asks_df = asks_df.merge(asks, on='price', how='left').fillna(0)
     except Exception as e:
-        Logan.log(
+        Logan.error(
             f"Error merging asks data for token {token1}: {e}",
-            type="error",
             namespace="data_updater.find_markets",
             exception=e
         )
@@ -294,9 +286,8 @@ def process_single_row(row, client):
         ret_bid = add_formula_params(bids_df, ret['midpoint'], v, rate)
         best_bid_reward = round(ret_bid['reward_per_100'].max(), 2)
     except Exception as e:
-        Logan.log(
+        Logan.error(
             f"Error calculating bid rewards for token {token1}: {e}",
-            type="error",
             namespace="data_updater.find_markets",
             exception=e
         )
@@ -308,9 +299,8 @@ def process_single_row(row, client):
         ret_ask = add_formula_params(asks_df, ret['midpoint'], v, rate)
         best_ask_reward = round(ret_ask['reward_per_100'].max(), 2)
     except Exception as e:
-        Logan.log(
+        Logan.error(
             f"Error calculating ask rewards for token {token1}: {e}",
-            type="error",
             namespace="data_updater.find_markets",
             exception=e
         )
@@ -354,9 +344,8 @@ def get_all_results(all_df, client, max_workers=3, batch_size=40):
         try:
             return process_single_row(row, client)
         except Exception as e:
-            Logan.log(
+            Logan.error(
                 f"Error fetching market data for {row.get('question', 'unknown market')}: {e}",
-                type="error",
                 namespace="data_updater.find_markets",
                 exception=e
             )
@@ -376,17 +365,15 @@ def get_all_results(all_df, client, max_workers=3, batch_size=40):
                     batch_results.append(result)
         
         all_results.extend(batch_results)
-        Logan.log(
+        Logan.info(
             f'{len(all_results)} of {len(all_df)} markets processed',
-            type="info",
             namespace="data_updater.find_markets"
         )
         
         # Rate limit: sleep for 10 seconds after each batch to respect API limits
         if i + batch_size < len(all_df):
-            Logan.log(
+            Logan.info(
                 "Waiting 10 seconds to respect rate limits...",
-                type="info",
                 namespace="data_updater.find_markets"
             )
             time.sleep(10)
@@ -454,9 +441,8 @@ def add_volatility_to_df(df, max_workers=2, batch_size=40):
             ret = add_volatility(row.to_dict())
             return ret
         except Exception as e:
-            Logan.log(
+            Logan.error(
                 f"Error fetching volatility for market {row.get('question', 'unknown market')}: {e}",
-                type="error",
                 namespace="data_updater.find_markets",
                 exception=e
             )
@@ -476,17 +462,15 @@ def add_volatility_to_df(df, max_workers=2, batch_size=40):
                     batch_results.append(result)
         
         results.extend(batch_results)
-        Logan.log(
+        Logan.info(
             f'{len(results)} of {len(df)} volatility calculations completed',
-            type="info",
             namespace="data_updater.find_markets"
         )
         
         # Rate limit: sleep for 10 seconds after each batch to respect API limits
         if i + batch_size < len(df):
-            Logan.log(
+            Logan.info(
                 "Waiting 10 seconds to respect rate limits...",
-                type="info",
                 namespace="data_updater.find_markets"
             )
             time.sleep(10)

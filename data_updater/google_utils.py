@@ -73,9 +73,8 @@ class ReadOnlyWorksheet:
             return df.to_dict('records')
             
         except Exception as e:
-            Logan.log(
+            Logan.error(
                 f"Error in get_all_records for Google Sheet '{self.title}': {e}",
-                type="error",
                 namespace="data_updater.google_utils",
                 exception=e
             )
@@ -98,9 +97,8 @@ class ReadOnlyWorksheet:
             return headers + data
             
         except Exception as e:
-            Logan.log(
+            Logan.error(
                 f"Error in get_all_values for Google Sheet '{self.title}': {e}",
-                type="error",
                 namespace="data_updater.google_utils",
                 exception=e
             )

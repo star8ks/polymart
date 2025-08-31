@@ -41,9 +41,8 @@ def get_all_positions(client):
         positions = positions.rename(columns={'size': 'position_size'})
         return positions
     except Exception as e:
-        Logan.log(
+        Logan.error(
             f"Error fetching all positions for account stats: {e}",
-            type="error",
             namespace="poly_stats.account_stats",
             exception=e
         )
@@ -119,31 +118,27 @@ def update_stats_once(client):
     selected_df = pd.DataFrame(wk_sel.get_all_records())
     
     markets_df = get_markets_df(wk_full)
-    Logan.log(
+    Logan.info(
         "Got spreadsheet...",
-        type="info",
         namespace="poly_stats.account_stats"
     )
 
     orders_df = get_all_orders(client)
-    Logan.log(
+    Logan.info(
         "Got Orders...",
-        type="info",
         namespace="poly_stats.account_stats"
     )
     positions = get_all_positions(client)
-    Logan.log(
+    Logan.info(
         "Got Positions...",
-        type="info",
         namespace="poly_stats.account_stats"
     )
 
     if len(positions) > 0 or len(orders_df) > 0:
         combined_df = combine_dfs(orders_df, positions, markets_df, selected_df)
         earnings = get_earnings(client.client)
-        Logan.log(
+        Logan.info(
             "Got Earnings...",
-            type="info",
             namespace="poly_stats.account_stats"
         )
         combined_df = combined_df.merge(earnings, on='question', how='left')
@@ -157,8 +152,7 @@ def update_stats_once(client):
 
         set_with_dataframe(wk_summary, combined_df, include_index=False, include_column_header=True, resize=True)
     else:
-        Logan.log(
+        Logan.warn(
             "Position or order is empty",
-            type="warning",
             namespace="poly_stats.account_stats"
         )

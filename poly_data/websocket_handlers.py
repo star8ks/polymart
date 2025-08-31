@@ -28,9 +28,8 @@ async def connect_market_websocket(chunk):
         message = {"assets_ids": chunk}
         await websocket.send(json.dumps(message))
 
-        Logan.log(
+        Logan.info(
             f"Sent market subscription message: {message}",
-            type="info",
             namespace="websocket_handlers"
         )
 
@@ -42,16 +41,14 @@ async def connect_market_websocket(chunk):
                 # Process order book updates and trigger trading as needed
                 process_data(json_data)
         except websockets.ConnectionClosed as e:
-            Logan.log(
+            Logan.error(
                 "Market websocket connection closed unexpectedly",
-                type="error",
                 namespace="websocket_handlers",
                 exception=e
             )
         except Exception as e:
-            Logan.log(
+            Logan.error(
                 f"Unexpected error in market websocket connection",
-                type="error",
                 namespace="websocket_handlers",
                 exception=e
             )
@@ -88,9 +85,8 @@ async def connect_user_websocket():
         # Send authentication message
         await websocket.send(json.dumps(message))
 
-        Logan.log(
+        Logan.info(
             "Sent user subscription message",
-            type="info",
             namespace="websocket_handlers"
         )
 
@@ -102,16 +98,14 @@ async def connect_user_websocket():
                 # Process trade and order updates
                 process_user_data(json_data)
         except websockets.ConnectionClosed as e:
-            Logan.log(
+            Logan.error(
                 "User websocket connection closed unexpectedly",
-                type="error",
                 namespace="websocket_handlers",
                 exception=e
             )
         except Exception as e:
-            Logan.log(
+            Logan.error(
                 f"Unexpected error in user websocket connection",
-                type="error",
                 namespace="websocket_handlers",
                 exception=e
             )

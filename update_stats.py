@@ -12,16 +12,14 @@ if __name__ == '__main__':
         try:
             update_stats_once(client)
         except Exception as e:
-            Logan.log(
+            Logan.error(
                 f"Error updating account stats",
-                type="error",
                 namespace="update_stats",
                 exception=e
             )
 
-        Logan.log(
+        Logan.info(
             "Now sleeping for 3 hours",
-            type="info",
             namespace="update_stats"
         )
         time.sleep(60 * 60 * 3) #3 hours
