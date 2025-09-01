@@ -17,18 +17,7 @@ from logan import Logan
 from poly_data.utils import get_sheet_df
 from poly_utils.google_utils import get_spreadsheet
 from gspread_dataframe import set_with_dataframe
-
-
-INVESTMENT_CEILING = 2000
-MAX_POSITION_MULT = 3
-BUDGET_MULT = 0.5
-MARKET_COUNT = 10
-
-# Filtering parameters
-MAX_VOLATILITY_SUM = 20.0
-MIN_ATTRACTIVENESS_SCORE = 0.0
-MAX_MIDPOINT = 0.90
-MIN_MIDPOINT = 0.10
+from configuration import TCNF
 
 @dataclass
 class PositionSizeResult:
@@ -72,34 +61,34 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
         df['midpoint'] = (df['best_bid'] + df['best_ask']) / 2
     
     # 1. Filter by volatility sum
-    if MAX_VOLATILITY_SUM > 0:
-        df = df[df['volatility_sum'] <= MAX_VOLATILITY_SUM]
+    if TCNF.MAX_VOLATILITY_SUM > 0:
+        df = df[df['volatility_sum'] <= TCNF.MAX_VOLATILITY_SUM]
         Logan.info(
-            f"After volatility filter (≤{MAX_VOLATILITY_SUM}): {len(df)}/{initial_count} markets",
+            f"After volatility filter (≤{TCNF.MAX_VOLATILITY_SUM}): {len(df)}/{initial_count} markets",
             namespace="poly_data.market_selection"
         )
     
     # 2. Filter by minimum attractiveness score
-    if MIN_ATTRACTIVENESS_SCORE > 0:
-        df = df[df['attractiveness_score'] >= MIN_ATTRACTIVENESS_SCORE]
+    if TCNF.MIN_ATTRACTIVENESS_SCORE > 0:
+        df = df[df['attractiveness_score'] >= TCNF.MIN_ATTRACTIVENESS_SCORE]
         Logan.info(
-            f"After attractiveness filter (≥{MIN_ATTRACTIVENESS_SCORE}): {len(df)}/{initial_count} markets",
+            f"After attractiveness filter (≥{TCNF.MIN_ATTRACTIVENESS_SCORE}): {len(df)}/{initial_count} markets",
             namespace="poly_data.market_selection"
         )
     
     # 3. Filter by midpoint range (avoid extreme probabilities)
-    df = df[(df['midpoint'] >= MIN_MIDPOINT) & (df['midpoint'] <= MAX_MIDPOINT)]
+    df = df[(df['midpoint'] >= TCNF.MIN_PRICE_LIMIT) & (df['midpoint'] <= TCNF.MAX_PRICE_LIMIT)]
     Logan.info(
-        f"After midpoint filter ({MIN_MIDPOINT}-{MAX_MIDPOINT}): {len(df)}/{initial_count} markets",
+        f"After midpoint filter ({TCNF.MIN_PRICE_LIMIT}-{TCNF.MAX_PRICE_LIMIT}): {len(df)}/{initial_count} markets",
         namespace="poly_data.market_selection"
     )
     
     # 4. Sort by attractiveness score and take top N
     df_sorted = df.sort_values(by='attractiveness_score', ascending=False, na_position='last')
-    result = df_sorted.head(MARKET_COUNT).reset_index(drop=True)
+    result = df_sorted.head(TCNF.MARKET_COUNT).reset_index(drop=True)
     
     Logan.info(
-        f"Final selection: {len(result)}/{initial_count} markets (top {MARKET_COUNT})",
+        f"Final selection: {len(result)}/{initial_count} markets (top {TCNF.MARKET_COUNT})",
         namespace="poly_data.market_selection"
     )
     
@@ -145,7 +134,7 @@ def write_selected_markets_to_sheet(selected_df: pd.DataFrame):
 
 def calculate_position_sizes(): 
     total_liquidity = global_state.available_liquidity
-    budget = total_liquidity * BUDGET_MULT
+    budget = total_liquidity * TCNF.BUDGET_MULT
     total_sharpe = global_state.selected_markets_df['attractiveness_score'].sum()
 
     global_state.market_position_sizes = {}
@@ -157,11 +146,11 @@ def calculate_position_sizes():
         
         global_state.market_position_sizes[condition_id] = PositionSizeResult(
             trade_size=size,
-            max_size=size * MAX_POSITION_MULT
+            max_size=size * TCNF.MAX_POSITION_MULT
         )
     
     floors = {row['condition_id']: float(row.get('min_size')) for _, row in global_state.selected_markets_df.iterrows()}
-    ceilings = {row['condition_id']: INVESTMENT_CEILING for _, row in global_state.selected_markets_df.iterrows()}
+    ceilings = {row['condition_id']: TCNF.INVESTMENT_CEILING for _, row in global_state.selected_markets_df.iterrows()}
 
     try:
         global_state.market_position_sizes = redistribute_for_bounds(global_state.market_position_sizes, floors, ceilings)
@@ -263,7 +252,7 @@ def redistribute_for_bounds(position_sizes: dict[str, PositionSizeResult], floor
             x[free] += diff / free.sum()
             x = np.clip(x, lower, upper)
 
-    return {k: PositionSizeResult(trade_size=float(x[i]), max_size=float(x[i]) * MAX_POSITION_MULT) for i, k in enumerate(keys)}
+    return {k: PositionSizeResult(trade_size=float(x[i]), max_size=float(x[i]) * TCNF.MAX_POSITION_MULT) for i, k in enumerate(keys)}
 
 def get_enhanced_market_row(condition_id: str) -> Optional[pd.Series]:
     """

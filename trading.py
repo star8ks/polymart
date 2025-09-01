@@ -8,13 +8,12 @@ from logan import Logan         # Logging
 
 import poly_data.global_state as global_state
 import poly_data.CONSTANTS as CONSTANTS
+from configuration import TCNF
 
 # Import utility functions for trading
 from poly_data.trading_utils import get_best_bid_ask_deets, get_order_prices, get_buy_sell_amount, round_down, round_up
 from poly_data.data_utils import get_position, get_order, get_readable_from_condition_id, get_total_balance, set_position
 from poly_data.market_selection import get_enhanced_market_row
-
-SELL_ONLY_THRESHOLD = 0.6
 
 # Create directory for storing position risk information
 if not os.path.exists('positions/'):
@@ -43,8 +42,8 @@ def send_buy_order(order):
     size_diff = abs(existing_buy_size - order['size']) if existing_buy_size > 0 else float('inf')
     
     should_cancel = (
-        price_diff > 0.002 or  # Cancel if price diff > 0.2 cents
-        size_diff > order['size'] * 0.1 or  # Cancel if size diff > 10%
+        price_diff > TCNF.BUY_PRICE_DIFF_THRESHOLD or  # Cancel if price diff > 0.2 cents
+        size_diff > order['size'] * TCNF.SIZE_DIFF_PERCENTAGE or  # Cancel if size diff > 10%
         existing_buy_size == 0  # Cancel if no existing buy order
     )
     
@@ -66,7 +65,7 @@ def send_buy_order(order):
 
     if trade:
         # Only place orders with prices between 0.1 and 0.9 to avoid extreme positions
-        if order['price'] >= 0.1 and order['price'] < 0.9:
+        if order['price'] >= TCNF.MIN_PRICE_LIMIT and order['price'] < TCNF.MAX_PRICE_LIMIT:
             client.create_order(
                 order['token'], 
                 'BUY', 
@@ -102,8 +101,8 @@ def send_sell_order(order):
     size_diff = abs(existing_sell_size - order['size']) if existing_sell_size > 0 else float('inf')
     
     should_cancel = (
-        price_diff > 0.001 or  # Cancel if price diff > 0.1 cents
-        size_diff > order['size'] * 0.1 or  # Cancel if size diff > 10%
+        price_diff > TCNF.SELL_PRICE_DIFF_THRESHOLD or  # Cancel if price diff > 0.1 cents
+        size_diff > order['size'] * TCNF.SIZE_DIFF_PERCENTAGE or  # Cancel if size diff > 10%
         existing_sell_size == 0  # Cancel if no existing sell order
     )
     
@@ -164,7 +163,7 @@ async def perform_trade(market):
             
             # Also sell if we have used most of our budget
             total_balance = get_total_balance()
-            if global_state.available_liquidity < total_balance * (1 - SELL_ONLY_THRESHOLD):
+            if global_state.available_liquidity < total_balance * (1 - TCNF.SELL_ONLY_THRESHOLD):
                 sell_only = True
             
             # Determine decimal precision from tick size
@@ -423,8 +422,8 @@ async def perform_trade(market):
                         rev_pos = get_position(rev_token)
 
                         # If we have significant opposing position, and box sum guard fails, don't buy more
-                        if rev_pos['size'] > row['min_size'] and order['price'] + rev_pos['avgPrice'] >= 0.99:
-                            if orders['buy']['size'] > CONSTANTS.MIN_MERGE_SIZE:
+                        if rev_pos['size'] > row['min_size'] and order['price'] + rev_pos['avgPrice'] >= TCNF.PRICE_PRECISION_LIMIT:
+                            if orders['buy']['size'] > TCNF.MIN_MERGE_SIZE:
                                 client.cancel_all_asset(order['token'])
                             
                             continue

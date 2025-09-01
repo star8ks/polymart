@@ -5,6 +5,7 @@ from logan import Logan
 
 from poly_data.data_processing import process_data, process_user_data
 import poly_data.global_state as global_state
+from configuration import MCNF
 
 async def connect_market_websocket(chunk):
     """
@@ -23,7 +24,7 @@ async def connect_market_websocket(chunk):
         attempt to reconnect after a short delay.
     """
     uri = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
-    async with websockets.connect(uri, ping_interval=5, ping_timeout=None) as websocket:
+    async with websockets.connect(uri, ping_interval=MCNF.WEBSOCKET_PING_INTERVAL, ping_timeout=None) as websocket:
         # Prepare and send subscription message
         message = {"assets_ids": chunk}
         await websocket.send(json.dumps(message))
@@ -71,7 +72,7 @@ async def connect_user_websocket():
     """
     uri = "wss://ws-subscriptions-clob.polymarket.com/ws/user"
 
-    async with websockets.connect(uri, ping_interval=5, ping_timeout=None) as websocket:
+    async with websockets.connect(uri, ping_interval=MCNF.WEBSOCKET_PING_INTERVAL, ping_timeout=None) as websocket:
         # Prepare authentication message with API credentials
         message = {
             "type": "user",

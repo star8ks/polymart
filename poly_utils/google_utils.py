@@ -6,6 +6,7 @@ import requests
 import re
 from dotenv import load_dotenv
 from logan import Logan
+from configuration import MCNF
 
 load_dotenv()
 
@@ -100,7 +101,7 @@ class ReadOnlyWorksheet:
                         f"Trying to fetch sheet '{self.title}' from: {csv_url}",
                         namespace="poly_utils.google_utils"
                     )
-                    response = requests.get(csv_url, timeout=30)
+                    response = requests.get(csv_url, timeout=MCNF.HTTP_TIMEOUT)
                     response.raise_for_status()
                     
                     # Read CSV data into DataFrame
@@ -157,7 +158,7 @@ class ReadOnlyWorksheet:
         """Get all values from the worksheet as a list of lists"""
         try:
             csv_url = f"https://docs.google.com/spreadsheets/d/{self.sheet_id}/gviz/tq?tqx=out:csv&sheet={self.title}"
-            response = requests.get(csv_url, timeout=30)
+            response = requests.get(csv_url, timeout=MCNF.HTTP_TIMEOUT)
             response.raise_for_status()
             
             # Read CSV and return as list of lists

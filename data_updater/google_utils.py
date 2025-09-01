@@ -5,6 +5,7 @@ import pandas as pd
 import requests
 import re
 from logan import Logan
+from configuration import MCNF
 
 
 def get_spreadsheet(read_only=False):
@@ -62,7 +63,7 @@ class ReadOnlyWorksheet:
         try:
             # Use the public CSV export URL
             csv_url = f"https://docs.google.com/spreadsheets/d/{self.sheet_id}/gviz/tq?tqx=out:csv&sheet={self.title}"
-            response = requests.get(csv_url, timeout=30)
+            response = requests.get(csv_url, timeout=MCNF.HTTP_TIMEOUT)
             response.raise_for_status()
             
             # Read CSV data into DataFrame
@@ -84,7 +85,7 @@ class ReadOnlyWorksheet:
         """Get all values from the worksheet as a list of lists"""
         try:
             csv_url = f"https://docs.google.com/spreadsheets/d/{self.sheet_id}/gviz/tq?tqx=out:csv&sheet={self.title}"
-            response = requests.get(csv_url, timeout=30)
+            response = requests.get(csv_url, timeout=MCNF.HTTP_TIMEOUT)
             response.raise_for_status()
             
             # Read CSV and return as list of lists

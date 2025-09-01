@@ -11,6 +11,7 @@ from poly_data.websocket_handlers import connect_market_websocket, connect_user_
 import poly_data.global_state as global_state
 from poly_data.data_processing import remove_from_performing
 from dotenv import load_dotenv
+from configuration import MCNF
 
 load_dotenv()
 
@@ -36,7 +37,7 @@ def remove_from_pending():
                 
                 try:
                     # If trade has been pending for more than 15 seconds, remove it
-                    if current_time - global_state.performing_timestamps[col].get(trade_id, current_time) > 15:
+                    if current_time - global_state.performing_timestamps[col].get(trade_id, current_time) > MCNF.STALE_TRADE_TIMEOUT:
                         Logan.info(f"Removing stale entry {trade_id} from {col} after 15 seconds", namespace="cleanup")
                         remove_from_performing(col, trade_id)
                 except Exception as e:
@@ -53,7 +54,7 @@ def update_periodically():
     """
     i = 1
     while True:
-        time.sleep(5)  # Update every 5 seconds
+        time.sleep(MCNF.POSITION_UPDATE_INTERVAL)  # Update every 5 seconds
         
         try:
             # Clean up stale trades
@@ -64,7 +65,7 @@ def update_periodically():
             update_orders()
 
             # Update market data every 6th cycle (30 seconds)
-            if i % 6 == 0:
+            if i % MCNF.MARKET_UPDATE_CYCLE_COUNT == 0:
                 update_markets()
                 i = 1
                     
