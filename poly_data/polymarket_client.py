@@ -307,7 +307,7 @@ class PolymarketClient:
         Raises:
             Exception: If the merge operation fails
         """
-        amount_to_merge_str = str(amount_to_merge)
+        amount_to_merge_str = str(int(amount_to_merge))
 
         # Prepare the command to run the JavaScript script
         node_command = f'node poly_merger/merge.js {amount_to_merge_str} {condition_id} {"true" if is_neg_risk_market else "false"}'

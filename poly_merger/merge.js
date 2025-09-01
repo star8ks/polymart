@@ -96,22 +96,9 @@ async function mergePositions(amountToMerge, conditionId, isNegRiskMarket) {
       nonce: nonce
     };
 
-    // Get the Safe address from environment variables
-    const safeAddress = process.env.BROWSER_ADDRESS;
-    const safe = new ethers.Contract(safeAddress, safeAbi, wallet);
-
-    // Execute the transaction through the Safe
+    // Execute transaction directly with wallet (bypassing Safe for now)
     console.log("Signing Transaction")
-    const txResponse = await signAndExecuteSafeTransaction(
-      wallet, 
-      safe, 
-      transaction.to, 
-      transaction.data, 
-      { 
-        gasPrice: transaction.gasPrice, 
-        gasLimit: transaction.gasLimit 
-      }
-    );
+    const txResponse = await wallet.sendTransaction(transaction);
     
     console.log("Sent transaction. Waiting for response")
     const txReceipt = await txResponse.wait();
