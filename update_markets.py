@@ -3,6 +3,7 @@ import pandas as pd
 from data_updater.trading_utils import get_clob_client
 from data_updater.google_utils import get_spreadsheet
 from data_updater.find_markets import get_all_markets, get_all_results, get_markets, add_volatility_to_df
+from data_updater.activity_metrics import add_activity_metrics_to_market_data
 from gspread_dataframe import set_with_dataframe
 from logan import Logan
 from configuration import TCNF
@@ -106,11 +107,43 @@ def fetch_and_process_data():
     new_df = add_volatility_to_df(all_markets)
     new_df['volatility_sum'] =  new_df['24_hour'] + new_df['7_day'] + new_df['14_day']
     
+    Logan.info(
+        f'{pd.to_datetime("now")}: Adding activity metrics to market data.',
+        namespace="update_markets"
+    )
+    
+    # Add activity metrics to each market
+    enhanced_markets = []
+    for _, market_row in new_df.iterrows():
+        try:
+            enhanced_market = add_activity_metrics_to_market_data(market_row.to_dict())
+            enhanced_markets.append(enhanced_market)
+        except Exception as e:
+            Logan.error(
+                f"Error adding activity metrics to market {market_row.get('question', 'unknown')}: {e}",
+                namespace="update_markets",
+                exception=e
+            )
+            # Add the original market data without activity metrics
+            enhanced_markets.append(market_row.to_dict())
+    
+    new_df = pd.DataFrame(enhanced_markets)
+    
     new_df['volatilty/reward'] = ((new_df['gm_reward_per_100'] / new_df['volatility_sum']).round(2)).astype(str)
 
-    new_df = new_df[['question', 'answer1', 'answer2', 'spread', 'rewards_daily_rate', 'gm_reward_per_100', 'sm_reward_per_100', 'bid_reward_per_100', 'ask_reward_per_100',  'volatility_sum', 'volatilty/reward', 'min_size', '1_hour', '3_hour', '6_hour', '12_hour', '24_hour', '7_day', '30_day',  
-                     'best_bid', 'best_ask', 'volatility_price', 'max_spread', 'tick_size', 'depth_yes_in', 'depth_no_in', 'attractiveness_score',
-                     'neg_risk',  'market_slug', 'token1', 'token2', 'condition_id']]
+    # Define the base columns that should always exist
+    base_columns = ['question', 'answer1', 'answer2', 'spread', 'rewards_daily_rate', 'gm_reward_per_100', 'sm_reward_per_100', 'bid_reward_per_100', 'ask_reward_per_100',  'volatility_sum', 'volatilty/reward', 'min_size', '1_hour', '3_hour', '6_hour', '12_hour', '24_hour', '7_day', '30_day',  
+                    'best_bid', 'best_ask', 'volatility_price', 'max_spread', 'tick_size', 'depth_yes_in', 'depth_no_in', 'attractiveness_score',
+                    'neg_risk',  'market_slug', 'token1', 'token2', 'condition_id']
+    
+    # Add activity metrics columns (these may not exist if there were errors)
+    activity_columns = ['total_volume', 'volume_usd', 'decay_weighted_volume', 'avg_daily_volume',
+                       'volume_inside_spread', 'total_trades', 'avg_trades_per_day', 'avg_trades_per_hour',
+                       'unique_makers', 'unique_takers', 'unique_traders', 'unique_transactions']
+    
+    # Select only columns that actually exist in the DataFrame
+    available_columns = [col for col in base_columns + activity_columns if col in new_df.columns]
+    new_df = new_df[available_columns]
 
     # Sort all markets by attractiveness_score (no filtering)
     new_df = new_df.sort_values('attractiveness_score', ascending=False)

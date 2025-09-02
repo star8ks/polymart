@@ -52,8 +52,15 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
     if missing_cols:
         raise Exception(f"Required columns missing: {missing_cols}")
     
+    # Define activity columns that might be present
+    activity_cols = ['total_volume', 'volume_usd', 'decay_weighted_volume', 'avg_trades_per_day', 
+                    'unique_traders', 'volume_inside_spread']
+    
     # Convert columns to numeric, handling any string/NaN values
-    for col in ['attractiveness_score', 'volatility_sum', 'best_bid', 'best_ask']:
+    numeric_cols = ['attractiveness_score', 'volatility_sum', 'best_bid', 'best_ask', 'gm_reward_per_100'] + \
+                   [col for col in activity_cols if col in df.columns]
+    
+    for col in numeric_cols:
         df[col] = pd.to_numeric(df[col], errors='coerce')
     
     # Calculate midpoint if not already present
@@ -63,32 +70,126 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
     # 1. Filter by volatility sum
     if TCNF.MAX_VOLATILITY_SUM > 0:
         df = df[df['volatility_sum'] <= TCNF.MAX_VOLATILITY_SUM]
+        avg_attractiveness = df['attractiveness_score'].mean() if len(df) > 0 else 0
+        avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
         Logan.info(
-            f"After volatility filter (≤{TCNF.MAX_VOLATILITY_SUM}): {len(df)}/{initial_count} markets",
+            f"After volatility filter (≤{TCNF.MAX_VOLATILITY_SUM}): {len(df)}/{initial_count} markets "
+            f"(avg attractiveness: {avg_attractiveness:.2f}, avg GM reward: {avg_gm_reward:.2f})",
             namespace="poly_data.market_selection"
         )
     
     # 2. Filter by minimum attractiveness score
     if TCNF.MIN_ATTRACTIVENESS_SCORE > 0:
         df = df[df['attractiveness_score'] >= TCNF.MIN_ATTRACTIVENESS_SCORE]
+        avg_attractiveness = df['attractiveness_score'].mean() if len(df) > 0 else 0
+        avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
         Logan.info(
-            f"After attractiveness filter (≥{TCNF.MIN_ATTRACTIVENESS_SCORE}): {len(df)}/{initial_count} markets",
+            f"After attractiveness filter (≥{TCNF.MIN_ATTRACTIVENESS_SCORE}): {len(df)}/{initial_count} markets "
+            f"(avg attractiveness: {avg_attractiveness:.2f}, avg GM reward: {avg_gm_reward:.2f})",
             namespace="poly_data.market_selection"
         )
     
     # 3. Filter by midpoint range (avoid extreme probabilities)
     df = df[(df['midpoint'] >= TCNF.MIN_PRICE_LIMIT) & (df['midpoint'] <= TCNF.MAX_PRICE_LIMIT)]
+    avg_attractiveness = df['attractiveness_score'].mean() if len(df) > 0 else 0
+    avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
     Logan.info(
-        f"After midpoint filter ({TCNF.MIN_PRICE_LIMIT}-{TCNF.MAX_PRICE_LIMIT}): {len(df)}/{initial_count} markets",
+        f"After midpoint filter ({TCNF.MIN_PRICE_LIMIT}-{TCNF.MAX_PRICE_LIMIT}): {len(df)}/{initial_count} markets "
+        f"(avg attractiveness: {avg_attractiveness:.2f}, avg GM reward: {avg_gm_reward:.2f})",
         namespace="poly_data.market_selection"
     )
     
-    # 4. Sort by attractiveness score and take top N
+    # 4. Activity-based filtering (only if activity metrics are available)
+    if 'total_volume' in df.columns:
+        pre_activity_count = len(df)
+        
+        # Filter by minimum total volume
+        df = df[df['total_volume'].fillna(0) >= TCNF.MIN_TOTAL_VOLUME]
+        avg_attractiveness = df['attractiveness_score'].mean() if len(df) > 0 else 0
+        avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
+        Logan.info(
+            f"After total volume filter (≥{TCNF.MIN_TOTAL_VOLUME}): {len(df)}/{initial_count} markets "
+            f"(avg attractiveness: {avg_attractiveness:.2f}, avg GM reward: {avg_gm_reward:.2f})",
+            namespace="poly_data.market_selection"
+        )
+        
+        # Filter by minimum USD volume
+        if 'volume_usd' in df.columns:
+            df = df[df['volume_usd'].fillna(0) >= TCNF.MIN_VOLUME_USD]
+            avg_attractiveness = df['attractiveness_score'].mean() if len(df) > 0 else 0
+            avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
+            Logan.info(
+                f"After USD volume filter (≥{TCNF.MIN_VOLUME_USD}): {len(df)}/{initial_count} markets "
+                f"(avg attractiveness: {avg_attractiveness:.2f}, avg GM reward: {avg_gm_reward:.2f})",
+                namespace="poly_data.market_selection"
+            )
+        
+        # Filter by minimum decay-weighted volume
+        if 'decay_weighted_volume' in df.columns:
+            df = df[df['decay_weighted_volume'].fillna(0) >= TCNF.MIN_DECAY_WEIGHTED_VOLUME]
+            avg_attractiveness = df['attractiveness_score'].mean() if len(df) > 0 else 0
+            avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
+            Logan.info(
+                f"After decay-weighted volume filter (≥{TCNF.MIN_DECAY_WEIGHTED_VOLUME}): {len(df)}/{initial_count} markets "
+                f"(avg attractiveness: {avg_attractiveness:.2f}, avg GM reward: {avg_gm_reward:.2f})",
+                namespace="poly_data.market_selection"
+            )
+        
+        # Filter by minimum average trades per day
+        if 'avg_trades_per_day' in df.columns:
+            df = df[df['avg_trades_per_day'].fillna(0) >= TCNF.MIN_AVG_TRADES_PER_DAY]
+            avg_attractiveness = df['attractiveness_score'].mean() if len(df) > 0 else 0
+            avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
+            Logan.info(
+                f"After avg trades per day filter (≥{TCNF.MIN_AVG_TRADES_PER_DAY}): {len(df)}/{initial_count} markets "
+                f"(avg attractiveness: {avg_attractiveness:.2f}, avg GM reward: {avg_gm_reward:.2f})",
+                namespace="poly_data.market_selection"
+            )
+        
+        # Filter by minimum unique traders
+        if 'unique_traders' in df.columns:
+            df = df[df['unique_traders'].fillna(0) >= TCNF.MIN_UNIQUE_TRADERS]
+            avg_attractiveness = df['attractiveness_score'].mean() if len(df) > 0 else 0
+            avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
+            Logan.info(
+                f"After unique traders filter (≥{TCNF.MIN_UNIQUE_TRADERS}): {len(df)}/{initial_count} markets "
+                f"(avg attractiveness: {avg_attractiveness:.2f}, avg GM reward: {avg_gm_reward:.2f})",
+                namespace="poly_data.market_selection"
+            )
+        
+        # Filter by minimum volume inside spread
+        if 'volume_inside_spread' in df.columns:
+            df = df[df['volume_inside_spread'].fillna(0) >= TCNF.MIN_VOLUME_INSIDE_SPREAD]
+            avg_attractiveness = df['attractiveness_score'].mean() if len(df) > 0 else 0
+            avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
+            Logan.info(
+                f"After volume inside spread filter (≥{TCNF.MIN_VOLUME_INSIDE_SPREAD}): {len(df)}/{initial_count} markets "
+                f"(avg attractiveness: {avg_attractiveness:.2f}, avg GM reward: {avg_gm_reward:.2f})",
+                namespace="poly_data.market_selection"
+            )
+        
+        avg_attractiveness = df['attractiveness_score'].mean() if len(df) > 0 else 0
+        avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
+        Logan.info(
+            f"Activity filters completed: {len(df)}/{initial_count} markets remaining "
+            f"(avg attractiveness: {avg_attractiveness:.2f}, avg GM reward: {avg_gm_reward:.2f})",
+            namespace="poly_data.market_selection"
+        )
+    else:
+        Logan.warn(
+            "Activity metrics not found in data, skipping activity-based filtering",
+            namespace="poly_data.market_selection"
+        )
+    
+    # 5. Sort by attractiveness score and take top N
     df_sorted = df.sort_values(by='attractiveness_score', ascending=False, na_position='last')
     result = df_sorted.head(TCNF.MARKET_COUNT).reset_index(drop=True)
     
+    final_avg_attractiveness = result['attractiveness_score'].mean() if len(result) > 0 else 0
+    final_avg_gm_reward = result['gm_reward_per_100'].mean() if len(result) > 0 else 0
     Logan.info(
-        f"Final selection: {len(result)}/{initial_count} markets (top {TCNF.MARKET_COUNT})",
+        f"Final selection: {len(result)}/{initial_count} markets (top {TCNF.MARKET_COUNT}) "
+        f"(avg attractiveness: {final_avg_attractiveness:.2f}, avg GM reward: {final_avg_gm_reward:.2f})",
         namespace="poly_data.market_selection"
     )
     
@@ -114,9 +215,16 @@ def write_selected_markets_to_sheet(selected_df: pd.DataFrame):
         # Clear existing data and write new selection
         worksheet.clear()
         
-        # Select key columns for the sheet
-        output_df = selected_df[['question', 'answer1', 'answer2', 'attractiveness_score', 'volatility_sum', 
-                               'gm_reward_per_100', 'best_bid', 'best_ask', 'token1', 'token2', 'condition_id']].copy()
+        # Select key columns for the sheet including activity metrics if available
+        base_output_cols = ['question', 'answer1', 'answer2', 'attractiveness_score', 'volatility_sum', 
+                           'gm_reward_per_100', 'best_bid', 'best_ask', 'token1', 'token2', 'condition_id']
+        
+        # Add activity columns if they exist
+        activity_output_cols = ['total_volume', 'volume_usd', 'avg_trades_per_day', 'unique_traders']
+        available_activity_cols = [col for col in activity_output_cols if col in selected_df.columns]
+        
+        output_cols = base_output_cols + available_activity_cols
+        output_df = selected_df[[col for col in output_cols if col in selected_df.columns]].copy()
         
         set_with_dataframe(worksheet, output_df, include_index=False, include_column_header=True, resize=True)
         

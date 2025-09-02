@@ -9,7 +9,7 @@ class TradingConfig:
     """Configuration constants for trading logic and operations."""
     
     # Order pricing and execution thresholds
-    SELL_ONLY_THRESHOLD = 0.6
+    SELL_ONLY_THRESHOLD = 0.7
     MIN_PRICE_LIMIT = 0.1
     MAX_PRICE_LIMIT = 0.9
     PRICE_PRECISION_LIMIT = 0.99  # Box sum guard threshold
@@ -21,21 +21,29 @@ class TradingConfig:
     
     # Position merging and size limits
     MIN_MERGE_SIZE = 20  # From CONSTANTS.py
-    DUST_POSITION_THRESHOLD = 1  # Positions smaller than this are ignored
     
     # Market selection and investment parameters
     INVESTMENT_CEILING = 2000
     MAX_POSITION_MULT = 3
-    BUDGET_MULT = 0.5
+    BUDGET_MULT = 1
     MARKET_COUNT = 10
     
     # Risk management thresholds
     MAX_VOLATILITY_SUM = 20.0
     MIN_ATTRACTIVENESS_SCORE = 0.0
     
-    # Price calculation parameters
-    VOLATILITY_THRESHOLD_COMMENT = 0.05  # Referenced in commented code
-    SIGNATURE_TYPE = 1  # For Polymarket client
+    # Activity metrics calculation parameters
+    ACTIVITY_LOOKBACK_DAYS = 7  # Number of days to look back for activity metrics
+    DECAY_HALF_LIFE_HOURS = 24  # Half-life for decay weighting (hours)
+    SPREAD_MULTIPLIER = 0.5  # Fraction of spread to use for volume-inside-spread calculation
+    
+    # Activity and volume filtering thresholds
+    MIN_TOTAL_VOLUME = 1000.0  # Minimum total trading volume over lookback period
+    MIN_VOLUME_USD = 0  # Minimum USD volume over lookback period
+    MIN_DECAY_WEIGHTED_VOLUME = 500.0  # Minimum decay-weighted volume (recent activity emphasized)
+    MIN_AVG_TRADES_PER_DAY = 10.0  # Minimum average trades per day
+    MIN_UNIQUE_TRADERS = 5  # Minimum number of unique traders
+    MIN_VOLUME_INSIDE_SPREAD = 400.0  # Minimum volume that occurred within spread bounds
     
 
 
