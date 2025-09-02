@@ -157,16 +157,18 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
                 namespace="poly_data.market_selection"
             )
         
-        # Filter by minimum volume inside spread
-        if 'volume_inside_spread' in df.columns:
-            df = df[df['volume_inside_spread'].fillna(0) >= TCNF.MIN_VOLUME_INSIDE_SPREAD]
-            avg_attractiveness = df['attractiveness_score'].mean() if len(df) > 0 else 0
-            avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
-            Logan.info(
-                f"After volume inside spread filter (≥{TCNF.MIN_VOLUME_INSIDE_SPREAD}): {len(df)}/{initial_count} markets "
-                f"(avg attractiveness: {avg_attractiveness:.2f}, avg GM reward: {avg_gm_reward:.2f})",
-                namespace="poly_data.market_selection"
-            )
+        # This doesn't make much sense because we are checking for trades within the current spread price range
+        # but we should be checking if the trade was inside the spread when the trade was made.
+        # Also the "spread" used here is the real spread, and we should be using the max spread of the market.
+        # if 'volume_inside_spread' in df.columns:
+        #     df = df[df['volume_inside_spread'].fillna(0) >= TCNF.MIN_VOLUME_INSIDE_SPREAD]
+        #     avg_attractiveness = df['attractiveness_score'].mean() if len(df) > 0 else 0
+        #     avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
+        #     Logan.info(
+        #         f"After volume inside spread filter (≥{TCNF.MIN_VOLUME_INSIDE_SPREAD}): {len(df)}/{initial_count} markets "
+        #         f"(avg attractiveness: {avg_attractiveness:.2f}, avg GM reward: {avg_gm_reward:.2f})",
+        #         namespace="poly_data.market_selection"
+        #     )
         
         avg_attractiveness = df['attractiveness_score'].mean() if len(df) > 0 else 0
         avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
