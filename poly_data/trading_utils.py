@@ -1,5 +1,5 @@
 import math 
-from poly_data.data_utils import update_positions
+from poly_data.data_utils import get_position, update_positions
 import poly_data.global_state as global_state
 
 # def get_avgPrice(position, assetId):
@@ -132,22 +132,39 @@ def find_best_price_with_size(price_dict, min_size, reverse=False):
 
 #     return bid_price, ask_price
 
-def get_order_prices(best_bid, top_bid, best_ask, top_ask, avgPrice, row):
+def get_order_prices(best_bid, best_bid_size, best_ask, best_ask_size, avgPrice, row, token):
     tick = row['tick_size']
+    trade_size = row['trade_size']
+
     if avgPrice == 0 or avgPrice is None:
         avgPrice = (best_bid + best_ask) / 2
     
-    bid_price = min(best_bid + tick, avgPrice - tick)
-    ask_price = max(best_ask - tick, avgPrice + tick)
+    bid_price = best_bid + tick
+    ask_price = best_ask - tick
+
+    # If best bid and best ask is not large enough, we don't have to beat them.
+    if bid_price > best_bid and best_bid_size < trade_size:
+        bid_price = best_bid
+    if ask_price < best_ask and best_ask_size < trade_size:
+        ask_price = best_ask
+
+    # if we already have position on this token, be lenient to buy more
+    pos = get_position(token)
+    if pos['size'] >= trade_size:
+        bid_price -= 1
+    
+    # Safety guards
+    bid_price = min(bid_price, avgPrice - tick)
+    ask_price = max(ask_price, avgPrice + tick)
 
     if (bid_price + ask_price) >= 1:
-        bid_price = top_bid
-        ask_price = top_ask
+        bid_price = best_bid
+        ask_price = best_ask
     
     if bid_price < 0.1 or bid_price > 0.9:
-        bid_price = top_bid
+        bid_price = best_bid
     if ask_price < 0.1 or ask_price > 0.9:
-        ask_price = top_ask
+        ask_price = best_ask
 
     return bid_price, ask_price
 
