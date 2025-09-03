@@ -13,6 +13,7 @@ class TradingConfig:
     MIN_PRICE_LIMIT = 0.1
     MAX_PRICE_LIMIT = 0.9
     PRICE_PRECISION_LIMIT = 0.99  # Box sum guard threshold
+    ORDER_EXPIRATION_SEC = 900
     
     # Order cancellation thresholds
     BUY_PRICE_DIFF_THRESHOLD = 0.002  # Cancel if price diff > 0.2 cents
@@ -25,8 +26,8 @@ class TradingConfig:
     # Market selection and investment parameters
     INVESTMENT_CEILING = 2000
     MAX_POSITION_MULT = 3
-    BUDGET_MULT = 1
-    MARKET_COUNT = 10
+    BUDGET_MULT = 2.5
+    MARKET_COUNT = 20
     
     # Risk management thresholds
     MAX_VOLATILITY_SUM = 20.0

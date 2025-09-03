@@ -1,10 +1,12 @@
+import time
 from dotenv import load_dotenv          # Environment variable management
 import os                           # Operating system interface
 
 # Polymarket API client libraries
-from py_clob_client.client import ClobClient
+from py_clob_client.client import ClobClient, OrderType
 from py_clob_client.clob_types import OrderArgs, BalanceAllowanceParams, AssetType, PartialCreateOrderOptions
 from py_clob_client.constants import POLYGON
+from configuration import TCNF
 
 # Web3 libraries for blockchain interaction
 from web3 import Web3
@@ -117,12 +119,15 @@ class PolymarketClient:
         Returns:
             dict: Response from the API containing order details, or empty dict on error
         """
+        expiration = int(time.time()) + TCNF.ORDER_EXPIRATION_SEC
+
         # Create order parameters
         order_args = OrderArgs(
             token_id=str(marketId),
             price=price,
             size=size,
-            side=action
+            side=action,
+            expiration=expiration
         )
 
         signed_order = None
@@ -135,7 +140,7 @@ class PolymarketClient:
             
         try:
             # Submit the signed order to the API
-            resp = self.client.post_order(signed_order)
+            resp = self.client.post_order(signed_order, orderType=OrderType.GTD)
             return resp
         except Exception as ex:
             Logan.error(
