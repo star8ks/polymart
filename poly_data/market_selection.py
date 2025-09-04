@@ -98,11 +98,19 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
         f"(avg attractiveness: {avg_attractiveness:.2f}, avg GM reward: {avg_gm_reward:.2f})",
         namespace="poly_data.market_selection"
     )
+
+    # 4. Filter out markets with spread greater than max spread
+    df = df[(df['spread'] * 100 <= df['max_spread'])]
+    avg_attractiveness = df['attractiveness_score'].mean() if len(df) > 0 else 0
+    avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
+    Logan.info(
+        f"After max spread filter (spread <= max spread): {len(df)}/{initial_count} markets "
+        f"(avg attractiveness: {avg_attractiveness:.2f}, avg GM reward: {avg_gm_reward:.2f})",
+        namespace="poly_data.market_selection"
+    )
     
-    # 4. Activity-based filtering (only if activity metrics are available)
+    # 5. Activity-based filtering (only if activity metrics are available)
     if 'total_volume' in df.columns:
-        pre_activity_count = len(df)
-        
         # Filter by minimum total volume
         df = df[df['total_volume'].fillna(0) >= TCNF.MIN_TOTAL_VOLUME]
         avg_attractiveness = df['attractiveness_score'].mean() if len(df) > 0 else 0
