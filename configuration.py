@@ -27,16 +27,18 @@ class TradingConfig:
     INVESTMENT_CEILING = 2000
     MAX_POSITION_MULT = 3
     BUDGET_MULT = 2.5
-    MARKET_COUNT = 20
+    MARKET_COUNT = 10
     
     # Risk management thresholds
     MAX_VOLATILITY_SUM = 20.0
     MIN_ATTRACTIVENESS_SCORE = 0.0
+    MARKET_IMBALANCE_CALC_PCT = 0.25 # percentage of midpoint to include in imbalance calculation
+    MARKET_IMBALANCE_CALC_LEVELS = 4 # number of price levels to include in imbalance calculation
+    MAX_MARKET_ORDER_IMBALANCE = 0.4 # absolute value. 1, -1 means completely imbalanced. 0 means completely balanced.
     
     # Activity metrics calculation parameters
     ACTIVITY_LOOKBACK_DAYS = 7  # Number of days to look back for activity metrics
     DECAY_HALF_LIFE_HOURS = 24  # Half-life for decay weighting (hours)
-    SPREAD_MULTIPLIER = 0.5  # Fraction of spread to use for volume-inside-spread calculation
     
     # Activity and volume filtering thresholds
     MIN_TOTAL_VOLUME = 1000.0  # Minimum total trading volume over lookback period

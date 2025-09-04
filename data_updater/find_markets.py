@@ -5,6 +5,8 @@ import requests
 import time
 import warnings
 from logan import Logan
+
+from configuration import TCNF
 warnings.filterwarnings("ignore")
 
 
@@ -129,6 +131,31 @@ def calculate_market_depth(bids_df, asks_df, midpoint, s_max):
         depth_no_in = filtered_asks['size'].sum()
     
     return depth_yes_in, depth_no_in
+
+def calculate_market_imbalance(bids_df, asks_df, midpoint):
+    # The window to look for imbalance is the hybrid of fixed number of price levels,
+    # and a fixed spread size calculated from the percentage of midpoint
+    bids_sorted = bids_df[bids_df['price'] <= midpoint].sort_values('price', ascending=False)
+    level_window_lower = bids_sorted['price'].head(TCNF.MARKET_IMBALANCE_CALC_LEVELS).min() if not bids_sorted.empty else midpoint
+
+    asks_sorted = asks_df[asks_df['price'] >= midpoint].sort_values('price', ascending=True)
+    level_window_upper = asks_sorted['price'].head(TCNF.MARKET_IMBALANCE_CALC_LEVELS).max() if not asks_sorted.empty else midpoint
+
+    spread_size = min(midpoint, 1-midpoint) * TCNF.MARKET_IMBALANCE_CALC_PCT
+    pct_window_lower = midpoint - spread_size/2
+    pct_window_upper = midpoint + spread_size/2
+
+    window_lower = max(level_window_lower, pct_window_lower)
+    window_upper = min(level_window_upper, pct_window_upper)
+
+    bids_in_window = bids_df[(bids_df['price'] >= window_lower) & (bids_df['price'] <= window_upper)]
+    bids_size_in_window = bids_in_window['size'].sum()
+    asks_in_window = asks_df[(asks_df['price'] >= window_lower) & (asks_df['price'] <= window_upper)]
+    asks_size_in_window = asks_in_window['size'].sum()
+
+    imbalance = (bids_size_in_window - asks_size_in_window) / (bids_size_in_window + asks_size_in_window)
+    return imbalance
+    
 
 def calculate_attractiveness_score(gm_rewards_per_100, spread, max_spread, tick_size, midpoint, 
                                  depth_yes_in, depth_no_in, volatility=None, 
@@ -317,6 +344,8 @@ def process_single_row(row, client):
         depth_no_in=depth_no_in
     )
 
+    ret['market_order_imbalance'] = calculate_market_imbalance(bids_df, asks_df, ret['midpoint'])
+
     ret['end_date_iso'] = row['end_date_iso']
     ret['market_slug'] = row['market_slug']
     ret['token1'] = token1
@@ -454,6 +483,66 @@ def add_volatility_to_df(df, max_workers=2, batch_size=40):
             time.sleep(10)
             
     return pd.DataFrame(results)
+
+def add_activity_metrics_to_df(df, max_workers=3, batch_size=100):
+    """
+    Add activity metrics to all markets in parallel batches.
+    
+    Args:
+        df: DataFrame with market data
+        max_workers: Number of concurrent threads
+        batch_size: Number of markets to process per batch
+        
+    Returns:
+        List of enhanced market dictionaries
+    """
+    from data_updater.activity_metrics import add_activity_metrics_to_market_data
+    
+    results = []
+    df = df.reset_index(drop=True)
+
+    def process_activity_metrics_with_progress(args):
+        idx, market_row = args
+        try:
+            enhanced_market = add_activity_metrics_to_market_data(market_row.to_dict())
+            return enhanced_market
+        except Exception as e:
+            Logan.error(
+                f"Error adding activity metrics to market {market_row.get('question', 'unknown')}: {e}",
+                namespace="data_updater.find_markets",
+                exception=e
+            )
+            # Return original market data without activity metrics
+            return market_row.to_dict()
+
+    # Process in batches to respect API rate limits
+    for i in range(0, len(df), batch_size):
+        batch_df = df.iloc[i:i+batch_size]
+        batch_results = []
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(process_activity_metrics_with_progress, (idx, row)) for idx, row in batch_df.iterrows()]
+            
+            for future in concurrent.futures.as_completed(futures):
+                result = future.result()
+                if result is not None:
+                    batch_results.append(result)
+        
+        results.extend(batch_results)
+        Logan.info(
+            f'Added activity metrics to {len(results)} of {len(df)} markets.',
+            namespace="data_updater.find_markets"
+        )
+        
+        # Rate limit: sleep for 10 seconds after each batch to respect API limits
+        if i + batch_size < len(df):
+            Logan.info(
+                "Waiting 10 seconds to respect rate limits...",
+                namespace="data_updater.find_markets"
+            )
+            time.sleep(10)
+            
+    return results
 
     
 def get_markets(all_results):

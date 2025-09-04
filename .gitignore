@@ -5,6 +5,7 @@ credentials.json
 .env
 .env.*
 positions/
+*.pem
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

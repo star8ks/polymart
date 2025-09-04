@@ -2,7 +2,7 @@ import time
 import pandas as pd
 from data_updater.trading_utils import get_clob_client
 from data_updater.google_utils import get_spreadsheet
-from data_updater.find_markets import get_all_markets, get_all_results, get_markets, add_volatility_to_df
+from data_updater.find_markets import get_all_markets, get_all_results, get_markets, add_volatility_to_df, add_activity_metrics_to_df
 from data_updater.activity_metrics import add_activity_metrics_to_market_data
 from gspread_dataframe import set_with_dataframe
 from logan import Logan
@@ -112,28 +112,15 @@ def fetch_and_process_data():
         namespace="update_markets"
     )
     
-    # Add activity metrics to each market
-    enhanced_markets = []
-    for _, market_row in new_df.iterrows():
-        try:
-            enhanced_market = add_activity_metrics_to_market_data(market_row.to_dict())
-            enhanced_markets.append(enhanced_market)
-        except Exception as e:
-            Logan.error(
-                f"Error adding activity metrics to market {market_row.get('question', 'unknown')}: {e}",
-                namespace="update_markets",
-                exception=e
-            )
-            # Add the original market data without activity metrics
-            enhanced_markets.append(market_row.to_dict())
-    
+    # Add activity metrics to all markets in parallel
+    enhanced_markets = add_activity_metrics_to_df(new_df, max_workers=3, batch_size=100)
     new_df = pd.DataFrame(enhanced_markets)
     
     new_df['volatilty/reward'] = ((new_df['gm_reward_per_100'] / new_df['volatility_sum']).round(2)).astype(str)
 
     # Define the base columns that should always exist
     base_columns = ['question', 'answer1', 'answer2', 'spread', 'rewards_daily_rate', 'gm_reward_per_100', 'sm_reward_per_100', 'bid_reward_per_100', 'ask_reward_per_100',  'volatility_sum', 'volatilty/reward', 'min_size', '1_hour', '3_hour', '6_hour', '12_hour', '24_hour', '7_day', '30_day',  
-                    'best_bid', 'best_ask', 'volatility_price', 'max_spread', 'tick_size', 'depth_yes_in', 'depth_no_in', 'attractiveness_score',
+                    'best_bid', 'best_ask', 'volatility_price', 'max_spread', 'tick_size', 'depth_yes_in', 'depth_no_in', 'attractiveness_score', 'market_order_imbalance',
                     'neg_risk',  'market_slug', 'token1', 'token2', 'condition_id']
     
     # Add activity metrics columns (these may not exist if there were errors)

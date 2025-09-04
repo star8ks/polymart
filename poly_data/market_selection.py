@@ -108,6 +108,16 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
         f"(avg attractiveness: {avg_attractiveness:.2f}, avg GM reward: {avg_gm_reward:.2f})",
         namespace="poly_data.market_selection"
     )
+
+    # 5. Filter by market order imbalance
+    df = df[df['market_order_imbalance'].abs() <= TCNF.MAX_MARKET_ORDER_IMBALANCE]
+    avg_attractiveness = df['attractiveness_score'].mean() if len(df) > 0 else 0
+    avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0 
+    Logan.info(
+        f"After market order imbalance filter (≤{TCNF.MAX_MARKET_ORDER_IMBALANCE}): {len(df)}/{initial_count} markets "
+        f"(avg attractiveness: {avg_attractiveness:.2f}, avg GM reward: {avg_gm_reward:.2f})",
+        namespace="poly_data.market_selection"
+    )
     
     # 5. Activity-based filtering (only if activity metrics are available)
     if 'total_volume' in df.columns:
@@ -243,14 +253,14 @@ def calculate_position_sizes():
     budget = total_liquidity * TCNF.BUDGET_MULT
     total_sharpe = global_state.selected_markets_df['attractiveness_score'].sum()
 
-    global_state.market_position_sizes = {}
+    global_state.market_trade_sizes = {}
     for _, row in global_state.selected_markets_df.iterrows():
         condition_id = str(row['condition_id'])
         sharpe = row['attractiveness_score']
 
         size = budget * (sharpe / total_sharpe)
         
-        global_state.market_position_sizes[condition_id] = PositionSizeResult(
+        global_state.market_trade_sizes[condition_id] = PositionSizeResult(
             trade_size=size,
             max_size=size * TCNF.MAX_POSITION_MULT
         )
@@ -259,21 +269,43 @@ def calculate_position_sizes():
     ceilings = {row['condition_id']: TCNF.INVESTMENT_CEILING for _, row in global_state.selected_markets_df.iterrows()}
 
     try:
-        global_state.market_position_sizes = redistribute_for_bounds(global_state.market_position_sizes, floors, ceilings)
+        global_state.market_trade_sizes = redistribute_for_bounds(global_state.market_trade_sizes, floors, ceilings)
     except Exception as e:
         Logan.error(
             f"Error redistributing for bounds: {e}",
             namespace="poly_data.market_selection",
             exception=e
         )
-        global_state.market_position_sizes = filter_out_outbound_markets(global_state.market_position_sizes, floors, ceilings)
-        
-def filter_out_outbound_markets(position_sizes: dict[str, PositionSizeResult], floors: dict[str, float], ceilings: dict[str, float]):
-    positions = position_sizes.copy()
-    for k, v in positions.items():
-        if v.trade_size < floors[k] or v.trade_size > ceilings[k]:
-            positions[k].trade_size = 0
-    return positions
+        global_state.market_trade_sizes = fallback_position_sizes_for_low_liquidity(budget)
+
+def fallback_position_sizes_for_low_liquidity(budget: float):
+    """
+    Select up to TCNF.MARKET_COUNT markets, sorted by attractiveness_score descending,
+    and allocate their min_size as position size, until the total exceeds the budget.
+    Returns a dict[condition_id, PositionSizeResult].
+    """
+    selected_df = global_state.selected_markets_df.copy()
+    if selected_df is None or selected_df.empty:
+        return {}
+
+    # Sort by attractiveness_score descending
+    selected_df = selected_df.sort_values("attractiveness_score", ascending=False)
+    total = 0.0
+    result = {}
+
+    for i, row in selected_df.iterrows():
+        condition_id = str(row["condition_id"])
+        size = float(row.get("min_size", 0.0))
+        if total + size > budget:
+            size = 0
+        result[condition_id] = PositionSizeResult(
+            trade_size=size,
+            max_size=size * TCNF.MAX_POSITION_MULT
+        )
+        total += size
+
+    return result
+
 
 def redistribute_for_bounds(position_sizes: dict[str, PositionSizeResult], floors: dict[str, float], ceilings: dict[str, float], tol: float = 1e-12, max_iter: int = 100) -> dict[str, PositionSizeResult]:
     """
@@ -385,7 +417,7 @@ def get_enhanced_market_row(condition_id: str) -> Optional[pd.Series]:
     market_row = matching_markets.iloc[0].copy()
     
     # Get position sizing information
-    position_size_info = global_state.market_position_sizes.get(condition_id)
+    position_size_info = global_state.market_trade_sizes.get(condition_id)
     if position_size_info:
         # Override trade_size and max_size with calculated values
         market_row['trade_size'] = position_size_info.trade_size

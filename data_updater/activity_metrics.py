@@ -218,12 +218,7 @@ def calculate_market_activity_metrics(condition_id: str, best_bid: float, best_a
             **frequency_metrics,
             **participant_metrics
         }
-        
-        Logan.info(
-            f"Calculated activity metrics for market {condition_id}: {len(trades_df)} trades over {TCNF.ACTIVITY_LOOKBACK_DAYS} days",
-            namespace="data_updater.activity_metrics"
-        )
-        
+
         return all_metrics
         
     except Exception as e:

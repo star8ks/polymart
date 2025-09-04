@@ -22,7 +22,7 @@ markets_with_positions = None
 
 # Position sizing information for each market
 # Format: {condition_id: PositionSizeResult}
-market_position_sizes = {}
+market_trade_sizes = {}
 
 # Available cash liquidity for trading (USDC balance)
 available_liquidity: Optional[float] = None  
