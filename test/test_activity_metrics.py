@@ -45,7 +45,6 @@ def test_activity_metrics_imports():
         from data_updater.activity_metrics import (
             get_market_trades_data,
             calculate_volume_metrics,
-            calculate_volume_inside_spread,
             calculate_trade_frequency,
             calculate_unique_participants,
             calculate_market_activity_metrics,

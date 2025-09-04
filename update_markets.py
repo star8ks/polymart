@@ -138,7 +138,7 @@ def fetch_and_process_data():
     
     # Add activity metrics columns (these may not exist if there were errors)
     activity_columns = ['total_volume', 'volume_usd', 'decay_weighted_volume', 'avg_daily_volume',
-                       'volume_inside_spread', 'total_trades', 'avg_trades_per_day', 'avg_trades_per_hour',
+                       'total_trades', 'avg_trades_per_day', 'avg_trades_per_hour',
                        'unique_makers', 'unique_takers', 'unique_traders', 'unique_transactions']
     
     # Select only columns that actually exist in the DataFrame

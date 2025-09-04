@@ -117,35 +117,6 @@ def calculate_volume_metrics(trades_df: pd.DataFrame) -> Dict[str, float]:
     }
 
 
-def calculate_volume_inside_spread(trades_df: pd.DataFrame, best_bid: float, best_ask: float) -> float:
-    """
-    Calculate volume of trades that occurred within a fixed spread around midpoint.
-    
-    Args:
-        trades_df: DataFrame with trade data
-        best_bid: Current best bid price
-        best_ask: Current best ask price  
-        
-    Returns:
-        Volume of trades within the spread
-    """
-    if trades_df.empty or best_bid <= 0 or best_ask <= 0:
-        return 0.0
-    
-    midpoint = (best_bid + best_ask) / 2
-    spread = best_ask - best_bid
-    spread_range = spread * TCNF.SPREAD_MULTIPLIER
-    
-    # Filter trades within spread range
-    lower_bound = midpoint - spread_range
-    upper_bound = midpoint + spread_range
-    
-    inside_spread_trades = trades_df[
-        (trades_df['price'] >= lower_bound) & 
-        (trades_df['price'] <= upper_bound)
-    ]
-    
-    return round(inside_spread_trades['size'].sum(), 2)
 
 
 def calculate_trade_frequency(trades_df: pd.DataFrame) -> Dict[str, float]:
@@ -238,14 +209,12 @@ def calculate_market_activity_metrics(condition_id: str, best_bid: float, best_a
             
         # Calculate all metrics
         volume_metrics = calculate_volume_metrics(trades_df)
-        volume_inside_spread = calculate_volume_inside_spread(trades_df, best_bid, best_ask)
         frequency_metrics = calculate_trade_frequency(trades_df)
         participant_metrics = calculate_unique_participants(trades_df)
         
         # Combine all metrics
         all_metrics = {
             **volume_metrics,
-            'volume_inside_spread': volume_inside_spread,
             **frequency_metrics,
             **participant_metrics
         }
