@@ -2,6 +2,7 @@ import gc                      # Garbage collection
 import time                    # Time functions
 import asyncio                 # Asynchronous I/O
 import threading               # Thread management
+import argparse                # Command line argument parsing
 from logan import Logan
 
 
@@ -12,8 +13,6 @@ import poly_data.global_state as global_state
 from poly_data.data_processing import remove_from_performing
 from dotenv import load_dotenv
 from configuration import MCNF
-
-load_dotenv()
 
 def update_once():
     """
@@ -112,4 +111,9 @@ async def main():
         gc.collect()  # Clean up memory
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Polymarket Market Making Bot")
+    parser.add_argument("--env", default=".env", help="Path to environment file (default: .env)")
+    args = parser.parse_args()
+    
+    load_dotenv(args.env)
     asyncio.run(main())

@@ -484,7 +484,7 @@ def add_volatility_to_df(df, max_workers=2, batch_size=40):
             
     return pd.DataFrame(results)
 
-def add_activity_metrics_to_df(df, max_workers=3, batch_size=100):
+def add_activity_metrics_to_df(df, max_workers=2, batch_size=40):
     """
     Add activity metrics to all markets in parallel batches.
     

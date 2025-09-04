@@ -2,7 +2,7 @@ output.txt
 data/
 credentials.json
 */credentials.json
-.env
+*.env
 .env.*
 positions/
 *.pem

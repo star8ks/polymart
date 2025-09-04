@@ -113,7 +113,7 @@ def fetch_and_process_data():
     )
     
     # Add activity metrics to all markets in parallel
-    enhanced_markets = add_activity_metrics_to_df(new_df, max_workers=3, batch_size=100)
+    enhanced_markets = add_activity_metrics_to_df(new_df)
     new_df = pd.DataFrame(enhanced_markets)
     
     new_df['volatilty/reward'] = ((new_df['gm_reward_per_100'] / new_df['volatility_sum']).round(2)).astype(str)
