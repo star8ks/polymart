@@ -6,6 +6,7 @@ import time
 import warnings
 from logan import Logan
 
+from data_updater.activity_metrics import add_activity_metrics_to_market_data
 from configuration import TCNF
 warnings.filterwarnings("ignore")
 
@@ -14,7 +15,7 @@ if not os.path.exists('data'):
     os.makedirs('data')
 
     
-def get_all_markets(client):
+def get_all_markets(client) -> pd.DataFrame:
     cursor = ""
     all_markets = []
 
@@ -197,7 +198,7 @@ def calculate_attractiveness_score(gm_rewards_per_100, spread, max_spread, tick_
     
     return attractiveness_score
 
-def process_single_row(row, client):
+def process_market_row(row, client):    
     ret = {}
     ret['question'] = row['question']
     ret['neg_risk'] = row['neg_risk']
@@ -334,9 +335,10 @@ def process_single_row(row, client):
     ret['depth_no_in'] = depth_no_in
 
     # Calculate attractiveness score
+    ret['spread'] = abs(ret['best_ask'] - ret['best_bid'])
     ret['attractiveness_score'] = calculate_attractiveness_score(
         gm_rewards_per_100=ret['gm_reward_per_100'],
-        spread=ret['best_ask'] - ret['best_bid'],
+        spread=ret['spread'],
         max_spread=ret['max_spread'],
         tick_size=TICK_SIZE,
         midpoint=ret['midpoint'],
@@ -352,16 +354,40 @@ def process_single_row(row, client):
     ret['token2'] = token2
     ret['condition_id'] = row['condition_id']
 
+    # Add volatility data using existing add_volatility function
+    try:
+        volatility_data = add_volatility(ret)
+        ret.update(volatility_data)
+    except Exception as e:
+        Logan.error(
+            f"Error adding volatility data for token {token1}: {e}",
+            namespace="data_updater.find_markets",
+            exception=e
+        )
+    ret['volatility_sum'] =  ret['24_hour'] + ret['7_day'] + ret['14_day']
+    ret['volatilty/reward'] = ((ret['gm_reward_per_100'] / ret['volatility_sum']).round(2)).astype(str)
+
+    # Add activity metrics using existing function
+    try:
+        ret = add_activity_metrics_to_market_data(ret)
+    except Exception as e:
+        Logan.error(
+            f"Error adding activity metrics for token {token1}: {e}",
+            namespace="data_updater.find_markets",
+            exception=e
+        )
+
     return ret
 
 
-def get_all_results(all_df, client, max_workers=3, batch_size=40):
+# This function is used to get detailed information for all markets through targeted apis like order book, trading history, etc.
+def get_all_markets_detailed(all_df: pd.DataFrame, client, max_workers=3, batch_size=40) -> pd.DataFrame:
     all_results = []
     
     def process_with_progress(args):
         idx, row = args
         try:
-            return process_single_row(row, client)
+            return process_market_row(row, client)
         except Exception as e:
             Logan.error(
                 f"Error fetching market data for {row.get('question', 'unknown market')}: {e}",
@@ -370,9 +396,10 @@ def get_all_results(all_df, client, max_workers=3, batch_size=40):
             )
             return None
 
-    # Process in batches to respect rate limits (Book endpoint: 50 requests/10s)
+    # Process in batches to respect rate limits
     for i in range(0, len(all_df), batch_size):
         batch_df = all_df.iloc[i:i+batch_size]
+        batch_start_time = time.perf_counter()
         batch_results = []
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -389,15 +416,18 @@ def get_all_results(all_df, client, max_workers=3, batch_size=40):
             namespace="data_updater.find_markets"
         )
         
-        # Rate limit: sleep for 10 seconds after each batch to respect API limits
+        # Rate limit: ensure a minimum 10s window per batch (processing time counts)
         if i + batch_size < len(all_df):
-            Logan.info(
-                "Waiting 10 seconds to respect rate limits...",
-                namespace="data_updater.find_markets"
-            )
-            time.sleep(10)
+            elapsed = time.perf_counter() - batch_start_time
+            remaining = max(0.0, 10.0 - elapsed)
+            if remaining > 0:
+                Logan.info(
+                    f"Waiting {remaining:.2f} seconds to respect rate limits...",
+                    namespace="data_updater.find_markets"
+                )
+                time.sleep(remaining)
 
-    return all_results
+    return pd.DataFrame(all_results)
 
 
 import concurrent.futures
@@ -437,126 +467,18 @@ def add_volatility(row):
     new_dict = {**row_dict, **stats}
     return new_dict
 
-def add_volatility_to_df(df, max_workers=2, batch_size=40):
-    
-    results = []
-    df = df.reset_index(drop=True)
+def cleanup_all_markets(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.replace([np.inf, -np.inf], 0)
+    df = df.sort_values('attractiveness_score', ascending=False)
 
-    def process_volatility_with_progress(args):
-        idx, row = args
-        try:
-            ret = add_volatility(row.to_dict())
-            return ret
-        except Exception as e:
-            Logan.error(
-                f"Error fetching volatility for market {row.get('question', 'unknown market')}: {e}",
-                namespace="data_updater.find_markets",
-                exception=e
-            )
-            return None
+    # Bring up important columns to front
+    first_columns = [
+        'question', 'answer1', 'answer2', 'attractiveness_score', 'spread', 'market_order_imbalance', 'rewards_daily_rate', 
+        'gm_reward_per_100', 'sm_reward_per_100', 'bid_reward_per_100', 'ask_reward_per_100', 'min_size', 'max_spread', 
+        'tick_size', 'market_slug', 'depth_yes_in', 'depth_no_in', 'condition_id', 'token1', 'token2'
+    ]
+    first_columns_in_df = [col for col in first_columns if col in df.columns]
+    extra_columns = [col for col in df.columns if col not in first_columns_in_df]
+    df = df[first_columns_in_df + extra_columns]
 
-    # Process in batches to respect rate limits (Price endpoint: 100 requests/10s)
-    for i in range(0, len(df), batch_size):
-        batch_df = df.iloc[i:i+batch_size]
-        batch_results = []
-        
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(process_volatility_with_progress, (idx, row)) for idx, row in batch_df.iterrows()]
-            
-            for future in concurrent.futures.as_completed(futures):
-                result = future.result()
-                if result is not None:
-                    batch_results.append(result)
-        
-        results.extend(batch_results)
-        Logan.info(
-            f'{len(results)} of {len(df)} volatility calculations completed',
-            namespace="data_updater.find_markets"
-        )
-        
-        # Rate limit: sleep for 10 seconds after each batch to respect API limits
-        if i + batch_size < len(df):
-            Logan.info(
-                "Waiting 10 seconds to respect rate limits...",
-                namespace="data_updater.find_markets"
-            )
-            time.sleep(10)
-            
-    return pd.DataFrame(results)
-
-def add_activity_metrics_to_df(df, max_workers=2, batch_size=40):
-    """
-    Add activity metrics to all markets in parallel batches.
-    
-    Args:
-        df: DataFrame with market data
-        max_workers: Number of concurrent threads
-        batch_size: Number of markets to process per batch
-        
-    Returns:
-        List of enhanced market dictionaries
-    """
-    from data_updater.activity_metrics import add_activity_metrics_to_market_data
-    
-    results = []
-    df = df.reset_index(drop=True)
-
-    def process_activity_metrics_with_progress(args):
-        idx, market_row = args
-        try:
-            enhanced_market = add_activity_metrics_to_market_data(market_row.to_dict())
-            return enhanced_market
-        except Exception as e:
-            Logan.error(
-                f"Error adding activity metrics to market {market_row.get('question', 'unknown')}: {e}",
-                namespace="data_updater.find_markets",
-                exception=e
-            )
-            # Return original market data without activity metrics
-            return market_row.to_dict()
-
-    # Process in batches to respect API rate limits
-    for i in range(0, len(df), batch_size):
-        batch_df = df.iloc[i:i+batch_size]
-        batch_results = []
-        
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(process_activity_metrics_with_progress, (idx, row)) for idx, row in batch_df.iterrows()]
-            
-            for future in concurrent.futures.as_completed(futures):
-                result = future.result()
-                if result is not None:
-                    batch_results.append(result)
-        
-        results.extend(batch_results)
-        Logan.info(
-            f'Added activity metrics to {len(results)} of {len(df)} markets.',
-            namespace="data_updater.find_markets"
-        )
-        
-        # Rate limit: sleep for 10 seconds after each batch to respect API limits
-        if i + batch_size < len(df):
-            Logan.info(
-                "Waiting 10 seconds to respect rate limits...",
-                namespace="data_updater.find_markets"
-            )
-            time.sleep(10)
-            
-    return results
-
-    
-def get_markets(all_results):
-    """Process market results and return clean dataframe with all markets"""
-    new_df = pd.DataFrame(all_results)
-    new_df['spread'] = abs(new_df['best_ask'] - new_df['best_bid'])
-    
-    # Select and reorder columns
-    new_df = new_df[['question', 'answer1', 'answer2', 'neg_risk', 'spread', 'best_bid', 'best_ask', 'rewards_daily_rate', 'bid_reward_per_100', 'ask_reward_per_100', 'gm_reward_per_100', 'sm_reward_per_100', 'min_size', 'max_spread', 'tick_size', 'market_slug', 'token1', 'token2', 'condition_id', 'depth_yes_in', 'depth_no_in', 'attractiveness_score']]
-    
-    # Clean up infinite values
-    new_df = new_df.replace([np.inf, -np.inf], 0)
-    
-    # Sort by attractiveness score
-    new_df = new_df.sort_values('attractiveness_score', ascending=False)
-    
-    return new_df
+    return df

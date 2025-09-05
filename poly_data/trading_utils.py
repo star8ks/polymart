@@ -132,9 +132,9 @@ def find_best_price_with_size(price_dict, min_size, reverse=False):
 
 #     return bid_price, ask_price
 
-def get_order_prices(best_bid, best_bid_size, best_ask, best_ask_size, avgPrice, row, token):
+def get_order_prices(best_bid, best_bid_size, best_ask, best_ask_size, avgPrice, row, token, position):
     tick = row['tick_size']
-    trade_size = row['trade_size']
+    trade_size = row.get('trade_size', position)
 
     if avgPrice == 0 or avgPrice is None:
         avgPrice = (best_bid + best_ask) / 2

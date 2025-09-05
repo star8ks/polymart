@@ -2,8 +2,7 @@ import time
 import pandas as pd
 from data_updater.trading_utils import get_clob_client
 from data_updater.google_utils import get_spreadsheet
-from data_updater.find_markets import get_all_markets, get_all_results, get_markets, add_volatility_to_df, add_activity_metrics_to_df
-from data_updater.activity_metrics import add_activity_metrics_to_market_data
+from data_updater.find_markets import cleanup_all_markets, get_all_markets, get_all_markets_detailed
 from gspread_dataframe import set_with_dataframe
 from logan import Logan
 from configuration import TCNF
@@ -82,70 +81,24 @@ def fetch_and_process_data():
 
     wk_all = spreadsheet.worksheet("All Markets")
 
-
-
-    all_df = get_all_markets(client)
+    all_markets_df = get_all_markets(client)
     Logan.info(
-        "Got all Markets",
-        namespace="update_markets"
-    )
-    all_results = get_all_results(all_df, client)
-    Logan.info(
-        "Got all Results",
-        namespace="update_markets"
-    )
-    all_markets = get_markets(all_results)
-    Logan.info(
-        "Got all orderbook",
+        f"Fetching information for {len(all_markets_df)} markets.",
         namespace="update_markets"
     )
 
+    all_markets_df = get_all_markets_detailed(all_markets_df, client)
+    all_markets_df = cleanup_all_markets(all_markets_df)
     Logan.info(
-        f'{pd.to_datetime("now")}: Fetched all markets data of length {len(all_markets)}.',
-        namespace="update_markets"
-    )
-    new_df = add_volatility_to_df(all_markets)
-    new_df['volatility_sum'] =  new_df['24_hour'] + new_df['7_day'] + new_df['14_day']
-    
-    Logan.info(
-        f'{pd.to_datetime("now")}: Adding activity metrics to market data.',
-        namespace="update_markets"
-    )
-    
-    # Add activity metrics to all markets in parallel
-    enhanced_markets = add_activity_metrics_to_df(new_df)
-    new_df = pd.DataFrame(enhanced_markets)
-    
-    new_df['volatilty/reward'] = ((new_df['gm_reward_per_100'] / new_df['volatility_sum']).round(2)).astype(str)
-
-    # Define the base columns that should always exist
-    base_columns = ['question', 'answer1', 'answer2', 'spread', 'rewards_daily_rate', 'gm_reward_per_100', 'sm_reward_per_100', 'bid_reward_per_100', 'ask_reward_per_100',  'volatility_sum', 'volatilty/reward', 'min_size', '1_hour', '3_hour', '6_hour', '12_hour', '24_hour', '7_day', '30_day',  
-                    'best_bid', 'best_ask', 'volatility_price', 'max_spread', 'tick_size', 'depth_yes_in', 'depth_no_in', 'attractiveness_score', 'market_order_imbalance',
-                    'neg_risk',  'market_slug', 'token1', 'token2', 'condition_id']
-    
-    # Add activity metrics columns (these may not exist if there were errors)
-    activity_columns = ['total_volume', 'volume_usd', 'decay_weighted_volume', 'avg_daily_volume',
-                       'total_trades', 'avg_trades_per_day', 'avg_trades_per_hour',
-                       'unique_makers', 'unique_takers', 'unique_traders', 'unique_transactions']
-    
-    # Select only columns that actually exist in the DataFrame
-    available_columns = [col for col in base_columns + activity_columns if col in new_df.columns]
-    new_df = new_df[available_columns]
-
-    # Sort all markets by attractiveness_score (no filtering)
-    new_df = new_df.sort_values('attractiveness_score', ascending=False)
-    
-
-    Logan.info(
-        f'{pd.to_datetime("now")}: Fetched select market of length {len(new_df)}.',
+        f'{pd.to_datetime("now")}: Fetched all markets data with volatility and activity metrics of length {len(all_markets_df)}.',
         namespace="update_markets"
     )
 
-    if len(new_df) > 50:
-        update_sheet(new_df, wk_all)
+    if len(all_markets_df) > 50:
+        update_sheet(all_markets_df, wk_all)
     else:
         Logan.warn(
-            f'{pd.to_datetime("now")}: Not updating sheet because of length {len(new_df)}.',
+            f'Not updating sheet because of length {len(all_markets_df)}.',
             namespace="update_markets"
         )
 
