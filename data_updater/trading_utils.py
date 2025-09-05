@@ -8,9 +8,6 @@ from web3 import Web3
 import json
 from logan import Logan
 
-from dotenv import load_dotenv
-load_dotenv()
-
 import time
 
 import os

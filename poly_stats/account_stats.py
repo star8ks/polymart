@@ -9,9 +9,6 @@ import json
 import os
 from logan import Logan
 
-from dotenv import load_dotenv
-load_dotenv()
-
 spreadsheet = get_spreadsheet()
 
 def get_markets_df(wk_full):

@@ -115,5 +115,5 @@ if __name__ == "__main__":
     parser.add_argument("--env", default=".env", help="Path to environment file (default: .env)")
     args = parser.parse_args()
     
-    load_dotenv(args.env)
+    load_dotenv(dotenv_path=args.env)
     asyncio.run(main())

@@ -1,5 +1,4 @@
 import time
-from dotenv import load_dotenv          # Environment variable management
 import os                           # Operating system interface
 
 # Polymarket API client libraries
@@ -23,9 +22,6 @@ from py_clob_client.clob_types import OpenOrderParams
 # Smart contract ABIs
 from poly_data.abis import NegRiskAdapterABI, ConditionalTokenABI, erc20_abi
 from poly_data.data_utils import get_readable_from_condition_id, get_readable_from_token_id
-
-# Load environment variables
-load_dotenv()
 
 
 class PolymarketClient:

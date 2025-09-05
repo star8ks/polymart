@@ -4,11 +4,8 @@ import os
 import pandas as pd
 import requests
 import re
-from dotenv import load_dotenv
 from logan import Logan
 from configuration import MCNF
-
-load_dotenv()
 
 def get_spreadsheet(read_only=False):
     """
