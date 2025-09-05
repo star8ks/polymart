@@ -78,8 +78,16 @@ async def main():
     Main application entry point. Initializes client, data, and manages websocket connections.
     """
 
-    Logan.init()
-    time.sleep(3)
+    parser = argparse.ArgumentParser(description="Polymarket Market Making Bot")
+    parser.add_argument("--env", default=".env", help="Path to environment file (default: .env)")
+    parser.add_argument("--nologan", action="store_true", default=False, help="Disable Logan server and log to console")
+    args = parser.parse_args()
+    
+    load_dotenv(dotenv_path=args.env)
+
+    if not args.nologan:
+        Logan.init()
+        time.sleep(3)
 
     # Initialize client
     global_state.client = PolymarketClient()
@@ -111,9 +119,4 @@ async def main():
         gc.collect()  # Clean up memory
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Polymarket Market Making Bot")
-    parser.add_argument("--env", default=".env", help="Path to environment file (default: .env)")
-    args = parser.parse_args()
-    
-    load_dotenv(dotenv_path=args.env)
     asyncio.run(main())
