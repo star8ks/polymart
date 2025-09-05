@@ -1,4 +1,5 @@
 import time
+from dotenv import load_dotenv
 import pandas as pd
 from data_updater.trading_utils import get_clob_client
 from data_updater.google_utils import get_spreadsheet
@@ -8,6 +9,7 @@ from logan import Logan
 from configuration import TCNF
 
 # Initialize global variables
+load_dotenv()
 spreadsheet = get_spreadsheet()
 client = get_clob_client()
 
@@ -102,7 +104,7 @@ def fetch_and_process_data():
             namespace="update_markets"
         )
 
-if __name__ == "__main__":
+if __name__ == "__main__":    
     while True:
         try:
             fetch_and_process_data()
