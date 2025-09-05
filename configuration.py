@@ -16,7 +16,8 @@ class TradingConfig:
     ORDER_EXPIRATION_SEC = 900
     
     # Order cancellation thresholds
-    BUY_PRICE_DIFF_THRESHOLD = 0.002  # Cancel if price diff > 0.2 cents
+    # TODO: I don't like this. It doesn't make sense for markets with lower ticks.
+    BUY_PRICE_DIFF_THRESHOLD = 0.001  # Cancel if price diff > 0.1 cents
     SELL_PRICE_DIFF_THRESHOLD = 0.001  # Cancel if price diff > 0.1 cents
     SIZE_DIFF_PERCENTAGE = 0.1  # Cancel if size diff > 10%
     
@@ -26,15 +27,15 @@ class TradingConfig:
     # Market selection and investment parameters
     INVESTMENT_CEILING = 2000
     MAX_POSITION_MULT = 3
-    BUDGET_MULT = 2.5
-    MARKET_COUNT = 10
+    BUDGET_MULT = 2
+    MARKET_COUNT = 20
     
     # Risk management thresholds
     MAX_VOLATILITY_SUM = 20.0
     MIN_ATTRACTIVENESS_SCORE = 0.0
     MARKET_IMBALANCE_CALC_PCT = 0.25 # percentage of midpoint to include in imbalance calculation
     MARKET_IMBALANCE_CALC_LEVELS = 4 # number of price levels to include in imbalance calculation
-    MAX_MARKET_ORDER_IMBALANCE = 0.4 # absolute value. 1, -1 means completely imbalanced. 0 means completely balanced.
+    MAX_MARKET_ORDER_IMBALANCE = 0.3 # absolute value. 1, -1 means completely imbalanced. 0 means completely balanced.
     
     # Activity metrics calculation parameters
     ACTIVITY_LOOKBACK_DAYS = 7  # Number of days to look back for activity metrics
