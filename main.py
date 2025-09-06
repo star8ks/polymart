@@ -90,7 +90,7 @@ async def main():
         time.sleep(3)
 
     # Initialize client
-    global_state.client = PolymarketClient()
+    global_state.client = PolymarketClient(env_path=args.env)
     
     # Initialize state and fetch initial data
     global_state.all_tokens = []

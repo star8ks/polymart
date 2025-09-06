@@ -190,6 +190,7 @@ async def perform_trade(market):
             # TODO: Do we want to merge whenever available, or sometimes push for better prices? 
             # Only merge if positions are above minimum threshold
             if float(amount_to_merge) > CONSTANTS.MIN_MERGE_SIZE:
+                Logan.debug(f"Merging positions {get_readable_from_condition_id(market)}", namespace="trading")
                 # Get exact position sizes from blockchain for merging
                 pos_1_raw = client.get_position(row['token1'])[0]
                 pos_2_raw = client.get_position(row['token2'])[0]

@@ -15,6 +15,7 @@ import requests                     # HTTP requests
 import pandas as pd                 # Data analysis
 import json                         # JSON processing
 import subprocess                   # For calling external processes
+import shlex                        # For safely quoting shell arguments
 from logan import Logan
 
 from py_clob_client.clob_types import OpenOrderParams
@@ -37,12 +38,13 @@ class PolymarketClient:
     The client connects to both the Polymarket API and the Polygon blockchain.
     """
     
-    def __init__(self, pk='default') -> None:
+    def __init__(self, pk='default', env_path=None) -> None:
         """
         Initialize the Polymarket client with API and blockchain connections.
         
         Args:
             pk (str, optional): Private key identifier, defaults to 'default'
+            env_path (str, optional): Path to a .env file to pass to merger
         """
         host="https://clob.polymarket.com"
 
@@ -100,6 +102,7 @@ class PolymarketClient:
         )
 
         self.web3 = web3
+        self.env_path = env_path
 
     
     def create_order(self, marketId, action, price, size, neg_risk=False):
@@ -312,7 +315,8 @@ class PolymarketClient:
         amount_to_merge_str = str(int(amount_to_merge))
 
         # Prepare the command to run the JavaScript script
-        node_command = f'node poly_merger/merge.js {amount_to_merge_str} {condition_id} {"true" if is_neg_risk_market else "false"}'
+        env_arg = f" {shlex.quote(self.env_path)}" if getattr(self, 'env_path', None) else ""
+        node_command = f'node poly_merger/merge.js {amount_to_merge_str} {condition_id} {"true" if is_neg_risk_market else "false"}{env_arg}'
         Logan.info(
             f"Running merge command: {node_command}",
             namespace="poly_data.polymarket_client"

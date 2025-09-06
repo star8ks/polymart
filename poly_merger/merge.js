@@ -19,16 +19,9 @@ const { existsSync } = require('fs');
 const { signAndExecuteSafeTransaction } = require('./safe-helpers');
 const { safeAbi } = require('./safeAbi');
 
-// Load environment variables
-const localEnvPath = resolve(__dirname, '.env');
-const parentEnvPath = resolve(__dirname, '../.env');
-const envPath = existsSync(localEnvPath) ? localEnvPath : parentEnvPath;
-require('dotenv').config({ path: envPath })
+// CLI arg may provide a custom .env path as 4th argument; defer parsing until after args
 
-// Connect to Polygon network
-const provider = new ethers.providers.JsonRpcProvider("https://polygon-rpc.com");
-const privateKey = process.env.PK;
-const wallet = new ethers.Wallet(privateKey, provider);
+// Provider and wallet will be initialized after dotenv is loaded from CLI arg
 
 // Polymarket contract addresses
 const addresses = {
@@ -58,7 +51,7 @@ const conditionalTokensAbi = [
  * @param {string|number} amountToMerge - Raw amount of tokens to merge (typically expressed in raw units, e.g., 1000000 = 1 USDC)
  * @param {string|number} conditionId - The market's condition ID
  * @param {boolean} isNegRiskMarket - Whether this is a negative risk market (uses different contract)
- * @returns {string} The transaction hash of the merge operation
+ * @returns {Promise<string>} The transaction hash of the merge operation
  */
 async function mergePositions(amountToMerge, conditionId, isNegRiskMarket) {
     // Log parameters for debugging
@@ -119,8 +112,28 @@ const conditionId = args[1];
 // Whether this is a negative risk market (true/false)
 const isNegRiskMarket = args[2] === 'true';
 
+// Optional .env path (4th argument)
+const providedEnvPath = args[3];
+
+// Load environment variables using provided path or fallback to local/parent
+const localEnvPath = resolve(__dirname, '.env');
+const parentEnvPath = resolve(__dirname, '../.env');
+const fallbackEnvPath = existsSync(localEnvPath) ? localEnvPath : parentEnvPath;
+const envPathToUse = providedEnvPath && existsSync(providedEnvPath) ? providedEnvPath : fallbackEnvPath;
+require('dotenv').config({ path: envPathToUse })
+
+// Connect to Polygon network and wallet after env is loaded
+const provider = new ethers.providers.JsonRpcProvider("https://polygon-rpc.com");
+const privateKey = process.env.PK;
+if (!privateKey) {
+  console.error("PK is not set in environment. Ensure .env path is correct.");
+  process.exit(1);
+}
+const wallet = new ethers.Wallet(privateKey, provider);
+
 // Execute the merge operation and handle any errors
 mergePositions(amountToMerge, conditionId, isNegRiskMarket)
+  .then(() => process.exit(0))
   .catch(error => {
     console.error("Error merging positions:", error);
     process.exit(1);
