@@ -21,8 +21,6 @@ const { safeAbi } = require('./safeAbi');
 
 // CLI arg may provide a custom .env path as 4th argument; defer parsing until after args
 
-// Provider and wallet will be initialized after dotenv is loaded from CLI arg
-
 // Polymarket contract addresses
 const addresses = {
   // Adapter contract for negative risk markets
@@ -89,9 +87,22 @@ async function mergePositions(amountToMerge, conditionId, isNegRiskMarket) {
       nonce: nonce
     };
 
-    // Execute transaction directly with wallet (bypassing Safe for now)
+    // Get the Safe address from environment variables
+    const safeAddress = process.env.BROWSER_ADDRESS;
+    const safe = new ethers.Contract(safeAddress, safeAbi, wallet);
+
+    // Execute the transaction through the Safe
     console.log("Signing Transaction")
-    const txResponse = await wallet.sendTransaction(transaction);
+    const txResponse = await signAndExecuteSafeTransaction(
+      wallet, 
+      safe, 
+      transaction.to, 
+      transaction.data, 
+      { 
+        gasPrice: transaction.gasPrice, 
+        gasLimit: transaction.gasLimit 
+      }
+    );
     
     console.log("Sent transaction. Waiting for response")
     const txReceipt = await txResponse.wait();
@@ -133,7 +144,6 @@ const wallet = new ethers.Wallet(privateKey, provider);
 
 // Execute the merge operation and handle any errors
 mergePositions(amountToMerge, conditionId, isNegRiskMarket)
-  .then(() => process.exit(0))
   .catch(error => {
     console.error("Error merging positions:", error);
     process.exit(1);

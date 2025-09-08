@@ -207,9 +207,9 @@ async def perform_trade(market):
                 
                 # TODO: for now, let it get updated by the background task
                 # Update our local position tracking
-                # scaled = amount_to_merge / 10**6
-                # set_position(row['token1'], 'SELL', scaled, 0, 'merge')
-                # set_position(row['token2'], 'SELL', scaled, 0, 'merge')
+                scaled = amount_to_merge / 10**6
+                set_position(row['token1'], 'SELL', scaled, 0, 'merge')
+                set_position(row['token2'], 'SELL', scaled, 0, 'merge')
                 
             # ------- TRADING LOGIC FOR EACH OUTCOME -------
             # Loop through both outcomes in the market (YES and NO)

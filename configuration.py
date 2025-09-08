@@ -17,8 +17,8 @@ class TradingConfig:
     
     # Order cancellation thresholds
     # TODO: I don't like this. It doesn't make sense for markets with lower ticks.
-    BUY_PRICE_DIFF_THRESHOLD = 0.001  # Cancel if price diff > 0.1 cents
-    SELL_PRICE_DIFF_THRESHOLD = 0.001  # Cancel if price diff > 0.1 cents
+    BUY_PRICE_DIFF_THRESHOLD = 0.002  # Cancel if price diff > 0.1 cents
+    SELL_PRICE_DIFF_THRESHOLD = 0.002  # Cancel if price diff > 0.1 cents
     SIZE_DIFF_PERCENTAGE = 0.1  # Cancel if size diff > 10%
     
     # Position merging and size limits
