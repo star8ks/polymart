@@ -57,7 +57,7 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
                     'unique_traders']
     
     # Convert columns to numeric, handling any string/NaN values
-    numeric_cols = ['attractiveness_score', 'volatility_sum', 'best_bid', 'best_ask', 'gm_reward_per_100'] + \
+    numeric_cols = ['attractiveness_score', 'volatility_sum', 'best_bid', 'best_ask', 'gm_reward_per_100', 'market_order_imbalance'] + \
                    [col for col in activity_cols if col in df.columns]
     
     for col in numeric_cols:
