@@ -190,26 +190,23 @@ async def perform_trade(market):
             # TODO: Do we want to merge whenever available, or sometimes push for better prices? 
             # Only merge if positions are above minimum threshold
             if float(amount_to_merge) > CONSTANTS.MIN_MERGE_SIZE:
-                Logan.debug(f"Merging positions {get_readable_from_condition_id(market)}", namespace="trading")
                 # Get exact position sizes from blockchain for merging
                 pos_1_raw = client.get_position(row['token1'])[0]
                 pos_2_raw = client.get_position(row['token2'])[0]
                 amount_to_merge_raw = min(pos_1_raw, pos_2_raw)
 
-                Logan.info(f"Position 1 is of size {pos_1_raw} and Position 2 is of size {pos_2_raw}. Merging positions", namespace="trading")
-                # Execute the merge operation
-                Logan.info(f"Merging {amount_to_merge_raw} of {row['token1']} and {row['token2']}", namespace="trading")
-
-                try:
-                    client.merge_positions(amount_to_merge_raw, market, row['neg_risk'] == 'TRUE')
-                except Exception as e:
-                    Logan.error(f"Error merging {amount_to_merge_raw} positions for market \"{get_readable_from_condition_id(market)}\": {e}", namespace="trading", exception=e)
+                if amount_to_merge_raw / 1e6 > CONSTANTS.MIN_MERGE_SIZE:
+                    Logan.info(f"Merging {amount_to_merge_raw} of {row['token1']} and {row['token2']}", namespace="trading")
+                    try:
+                        client.merge_positions(amount_to_merge_raw, market, row['neg_risk'] == 'TRUE')
+                    except Exception as e:
+                        Logan.error(f"Error merging {amount_to_merge_raw} positions for market \"{get_readable_from_condition_id(market)}\": {e}", namespace="trading", exception=e)
                 
                 # TODO: for now, let it get updated by the background task
                 # Update our local position tracking
-                scaled = amount_to_merge / 10**6
-                set_position(row['token1'], 'SELL', scaled, 0, 'merge')
-                set_position(row['token2'], 'SELL', scaled, 0, 'merge')
+                # scaled = amount_to_merge / 10**6
+                # set_position(row['token1'], 'SELL', scaled, 0, 'merge')
+                # set_position(row['token2'], 'SELL', scaled, 0, 'merge')
                 
             # ------- TRADING LOGIC FOR EACH OUTCOME -------
             # Loop through both outcomes in the market (YES and NO)

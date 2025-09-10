@@ -9,11 +9,11 @@ class TradingConfig:
     """Configuration constants for trading logic and operations."""
     
     # Order pricing and execution thresholds
-    SELL_ONLY_THRESHOLD = 0.7
+    SELL_ONLY_THRESHOLD = 0.8
     MIN_PRICE_LIMIT = 0.1
     MAX_PRICE_LIMIT = 0.9
     PRICE_PRECISION_LIMIT = 0.99  # Box sum guard threshold
-    ORDER_EXPIRATION_SEC = 900
+    ORDER_EXPIRATION_SEC = 1800
     
     # Order cancellation thresholds
     # TODO: I don't like this. It doesn't make sense for markets with lower ticks.
@@ -27,8 +27,8 @@ class TradingConfig:
     # Market selection and investment parameters
     INVESTMENT_CEILING = 2000
     MAX_POSITION_MULT = 3
-    BUDGET_MULT = 2
-    MARKET_COUNT = 20
+    BUDGET_MULT = 2.5
+    MARKET_COUNT = 25
     
     # Risk management thresholds
     MAX_VOLATILITY_SUM = 20.0
@@ -42,10 +42,10 @@ class TradingConfig:
     DECAY_HALF_LIFE_HOURS = 24  # Half-life for decay weighting (hours)
     
     # Activity and volume filtering thresholds
-    MIN_TOTAL_VOLUME = 1000.0  # Minimum total trading volume over lookback period
+    MIN_TOTAL_VOLUME = 800.0  # Minimum total trading volume over lookback period
     MIN_VOLUME_USD = 0  # Minimum USD volume over lookback period
-    MIN_DECAY_WEIGHTED_VOLUME = 500.0  # Minimum decay-weighted volume (recent activity emphasized)
-    MIN_AVG_TRADES_PER_DAY = 10.0  # Minimum average trades per day
+    MIN_DECAY_WEIGHTED_VOLUME = 350.0  # Minimum decay-weighted volume (recent activity emphasized)
+    MIN_AVG_TRADES_PER_DAY = 6.0  # Minimum average trades per day
     MIN_UNIQUE_TRADERS = 5  # Minimum number of unique traders
     MIN_VOLUME_INSIDE_SPREAD = 400.0  # Minimum volume that occurred within spread bounds
     
