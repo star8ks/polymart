@@ -3,7 +3,6 @@ import os                       # Operating system interface
 import json                     # JSON handling
 import asyncio                  # Asynchronous I/O
 import pandas as pd             # Data analysis library
-import math                     # Mathematical functions
 from logan import Logan         # Logging
 
 import poly_data.global_state as global_state
@@ -11,8 +10,9 @@ import poly_data.CONSTANTS as CONSTANTS
 from configuration import TCNF
 
 # Import utility functions for trading
-from poly_data.trading_utils import get_best_bid_ask_deets, get_order_prices, get_buy_sell_amount, round_down, round_up
-from poly_data.data_utils import get_position, get_order, get_readable_from_condition_id, get_total_balance, set_position
+from poly_data.market_strategy import MarketStrategy
+from poly_data.trading_utils import get_best_bid_ask_deets, round_down, round_up
+from poly_data.data_utils import get_position, get_order, get_readable_from_condition_id, get_total_balance
 from poly_data.market_selection import get_enhanced_market_row
 
 # Create directory for storing position risk information
@@ -224,30 +224,13 @@ async def perform_trade(market):
                     deets = get_best_bid_ask_deets(market, detail['name'], 20)
                 
                 # Extract all order book details
-                best_bid = deets['best_bid']
+                best_bid = round(deets['best_bid'], round_length) if deets['best_bid'] is not None else None
                 best_bid_size = deets['best_bid_size']
-                second_best_bid = deets['second_best_bid']
-                second_best_bid_size = deets['second_best_bid_size'] 
-                top_bid = deets['top_bid']
-                best_ask = deets['best_ask']
+                best_ask = round(deets['best_ask'], round_length) if deets['best_ask'] is not None else None
                 best_ask_size = deets['best_ask_size']
-                second_best_ask = deets['second_best_ask']
-                second_best_ask_size = deets['second_best_ask_size']
-                top_ask = deets['top_ask']
+                top_bid = round(deets['top_bid'], round_length) if deets['top_bid'] is not None else None
+                top_ask = round(deets['top_ask'], round_length) if deets['top_ask'] is not None else None
                 
-                # Round prices to appropriate precision
-                best_bid = round(best_bid, round_length) if best_bid is not None else None
-                best_ask = round(best_ask, round_length) if best_ask is not None else None
-
-                try:
-                    second_best_bid = round(second_best_bid, round_length) if second_best_bid is not None else None
-                    second_best_ask = round(second_best_ask, round_length) if second_best_ask is not None else None
-                except Exception as e:
-                    Logan.error(f"Error rounding second best prices for {detail['name']}: {e}", namespace="trading", exception=e)
-                
-                top_bid = round(top_bid, round_length) if top_bid is not None else None
-                top_ask = round(top_ask, round_length) if top_ask is not None else None
-
                 # Get our current position and average price
                 pos = get_position(token)
                 position = pos['size']
@@ -256,7 +239,7 @@ async def perform_trade(market):
                 position = round_down(position, 2)
                
                 # Calculate optimal bid and ask prices based on market conditions
-                bid_price, ask_price = get_order_prices(
+                bid_price, ask_price = MarketStrategy.get_order_prices(
                     best_bid, best_bid_size, best_ask, best_ask_size, 
                     avgPrice, row, token, position
                 )
@@ -266,17 +249,13 @@ async def perform_trade(market):
 
                 # Calculate mid price for reference
                 mid_price = (top_bid + top_ask) / 2
-                
-                # Log market conditions for this outcome
-                #       f"avgPrice: {avgPrice}, Best Bid: {best_bid}, Best Ask: {best_ask}, "
-                #       f"Bid Price: {bid_price}, Ask Price: {ask_price}, Mid Price: {mid_price}")
 
                 # Get position for the opposite token to calculate total exposure
                 other_token = global_state.REVERSE_TOKENS[str(token)]
                 other_position = get_position(other_token)['size']
                 
                 # Calculate how much to buy or sell based on our position
-                buy_amount, sell_amount = get_buy_sell_amount(position, row, force_sell=sell_only)
+                buy_amount, sell_amount = MarketStrategy.get_buy_sell_amount(position, row, force_sell=sell_only)
                 
                 # Get max_size for logging (same logic as in get_buy_sell_amount)
                 trade_size = row.get('trade_size', position)
@@ -318,7 +297,7 @@ async def perform_trade(market):
                     order['price'] = ask_price
 
                     # Get fresh market data for risk assessment
-                    n_deets = get_best_bid_ask_deets(market, detail['name'], 100, 0.1)
+                    n_deets = get_best_bid_ask_deets(market, detail['name'], 100)
                     
                     # Calculate current market price and spread
                     mid_price = round_up((n_deets['best_bid'] + n_deets['best_ask']) / 2, round_length)
@@ -334,12 +313,6 @@ async def perform_trade(market):
                         'question': row['question']
                     }
 
-                    try:
-                        ratio = (n_deets['bid_sum_within_n_percent']) / (n_deets['ask_sum_within_n_percent'])
-                    except Exception as e:
-                        Logan.error(f"Error calculating fresh liquidity ratio for {detail['name']} during sell logic: using default value 0", namespace="trading")
-                        ratio = 0
-
                     pos_to_sell = sell_amount  # Amount to sell in risk-off scenario
 
                     # ------- STOP-LOSS LOGIC -------
@@ -348,7 +321,7 @@ async def perform_trade(market):
                     # 2. Volatility is too high
                     if sell_only or (pnl < params['stop_loss_threshold'] and spread <= params['spread_threshold']) or row['3_hour'] > params['volatility_threshold']:
                         risk_details['msg'] = (f"Selling {pos_to_sell} because spread is {spread} and pnl is {pnl} "
-                                              f"and ratio is {ratio} and 3 hour volatility is {row['3_hour']}, and sell_only is {sell_only}")
+                                              f"and 3 hour volatility is {row['3_hour']}, and sell_only is {sell_only}")
 
                         # Sell at market best bid to ensure execution
                         order['size'] = pos_to_sell
@@ -454,12 +427,6 @@ async def perform_trade(market):
                     elif orders['sell']['size'] < position * 0.97:
                         Logan.info(f"Sending Sell Order for {token} because not enough sell size. ", namespace="trading")
                         send_sell_order(order)
-                    
-                    # Commented out additional conditions for updating sell orders
-                    # elif orders['sell']['price'] < ask_price:
-                    #     send_sell_order(order)
-                    # elif best_ask_size < orders['sell']['size'] * 0.98 and abs(best_ask - second_best_ask) > 0.03...:
-                    #     send_sell_order(order)
 
         except Exception as ex:
             Logan.error(f"Critical error in perform_trade function for market {market} ({row.get('question', 'unknown question') if 'row' in locals() else 'unknown question'}): {ex}", namespace="trading", exception=ex)
