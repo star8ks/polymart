@@ -187,7 +187,6 @@ async def perform_trade(market):
             # Calculate if we have opposing positions that can be merged
             amount_to_merge = min(pos_1, pos_2)
             
-            # TODO: Do we want to merge whenever available, or sometimes push for better prices? 
             # Only merge if positions are above minimum threshold
             if float(amount_to_merge) > CONSTANTS.MIN_MERGE_SIZE:
                 # Get exact position sizes from blockchain for merging
@@ -217,12 +216,12 @@ async def perform_trade(market):
                 orders = get_order(token)
 
                 # Get market depth and price information
-                deets = get_best_bid_ask_deets(market, detail['name'], 100, 0.1)
+                deets = get_best_bid_ask_deets(market, detail['name'], 100)
 
                 # NOTE: This looks hacky and risky
                 #if deet has None for one these values below, call it with min size of 20
                 if deets['best_bid'] is None or deets['best_ask'] is None or deets['best_bid_size'] is None or deets['best_ask_size'] is None:
-                    deets = get_best_bid_ask_deets(market, detail['name'], 20, 0.1)
+                    deets = get_best_bid_ask_deets(market, detail['name'], 20)
                 
                 # Extract all order book details
                 best_bid = deets['best_bid']
@@ -239,13 +238,6 @@ async def perform_trade(market):
                 # Round prices to appropriate precision
                 best_bid = round(best_bid, round_length) if best_bid is not None else None
                 best_ask = round(best_ask, round_length) if best_ask is not None else None
-
-                # Calculate ratio of buy vs sell liquidity in the market
-                try:
-                    overall_ratio = (deets['bid_sum_within_n_percent']) / (deets['ask_sum_within_n_percent'])
-                except Exception as e:
-                    Logan.error(f"Error calculating overall liquidity ratio for {detail['name']}: using default value 0", namespace="trading")
-                    overall_ratio = 0
 
                 try:
                     second_best_bid = round(second_best_bid, round_length) if second_best_bid is not None else None
@@ -423,30 +415,21 @@ async def perform_trade(market):
                         if rev_pos['size'] > row['min_size'] and order['price'] + rev_pos['avgPrice'] >= TCNF.PRICE_PRECISION_LIMIT:
                             if orders['buy']['size'] > TCNF.MIN_MERGE_SIZE:
                                 client.cancel_all_asset(order['token'])
-                            
                             continue
-                        
-                        # Check market buy/sell volume ratio
-                        if overall_ratio < 0:
-                            send_buy = False
-                            client.cancel_all_asset(order['token'])
-                        else:
-                            # Place new buy order if any of these conditions are met:
-                            # 1. We can get a better price than current order
-                            if best_bid > orders['buy']['price']:
-                                Logan.info(f"Sending Buy Order for {token} because better price. ", namespace="trading")
-                                send_buy_order(order)
-                            # 2. Current position + orders is not enough to reach max_size
-                            elif position + orders['buy']['size'] < max_size:
-                                Logan.info(f"Sending Buy Order for {token} because not enough position + size", namespace="trading")
-                                send_buy_order(order)
-                            # 3. Our current order is too large and needs to be resized
-                            elif orders['buy']['size'] > order['size'] * 1.01:
-                                Logan.info(f"Resending buy orders because open orders are too large", namespace="trading")
-                                send_buy_order(order)
-                            # Commented out logic for cancelling orders when market conditions change
-                            # elif best_bid_size < orders['buy']['size'] * 0.98 and abs(best_bid - second_best_bid) > 0.03:
-                            #     global_state.client.cancel_all_asset(order['token'])
+                    
+                        # Place new buy order if any of these conditions are met:
+                        # 1. We can get a better price than current order
+                        if best_bid > orders['buy']['price']:
+                            Logan.info(f"Sending Buy Order for {token} because better price. ", namespace="trading")
+                            send_buy_order(order)
+                        # 2. Current position + orders is not enough to reach max_size
+                        elif position + orders['buy']['size'] < max_size:
+                            Logan.info(f"Sending Buy Order for {token} because not enough position + size", namespace="trading")
+                            send_buy_order(order)
+                        # 3. Our current order is too large and needs to be resized
+                        elif orders['buy']['size'] > order['size'] * 1.01:
+                            Logan.info(f"Resending buy orders because open orders are too large", namespace="trading")
+                            send_buy_order(order)
                         
                 # ------- TAKE PROFIT / SELL ORDER MANAGEMENT -------            
                 elif sell_amount > 0:

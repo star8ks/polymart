@@ -13,7 +13,7 @@ class TradingConfig:
     MIN_PRICE_LIMIT = 0.1
     MAX_PRICE_LIMIT = 0.9
     PRICE_PRECISION_LIMIT = 0.99  # Box sum guard threshold
-    ORDER_EXPIRATION_SEC = 1800
+    ORDER_EXPIRATION_SEC = 900
     
     # Order cancellation thresholds
     # TODO: I don't like this. It doesn't make sense for markets with lower ticks.

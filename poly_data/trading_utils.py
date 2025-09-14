@@ -25,28 +25,16 @@ import poly_data.global_state as global_state
 #                 return 0
 #     return api_avgPrice
 
-def get_best_bid_ask_deets(market, name, size, deviation_threshold=0.05):
-
+def get_best_bid_ask_deets(market, name, size):
     best_bid, best_bid_size, second_best_bid, second_best_bid_size, top_bid = find_best_price_with_size(global_state.all_data[market]['bids'], size, reverse=True)
     best_ask, best_ask_size, second_best_ask, second_best_ask_size, top_ask = find_best_price_with_size(global_state.all_data[market]['asks'], size, reverse=False)
-    
-    # Handle None values in mid_price calculation
-    if best_bid is not None and best_ask is not None:
-        mid_price = (best_bid + best_ask) / 2
-        bid_sum_within_n_percent = sum(size for price, size in global_state.all_data[market]['bids'].items() if best_bid <= price <= mid_price * (1 + deviation_threshold))
-        ask_sum_within_n_percent = sum(size for price, size in global_state.all_data[market]['asks'].items() if mid_price * (1 - deviation_threshold) <= price <= best_ask)
-    else:
-        mid_price = None
-        bid_sum_within_n_percent = 0
-        ask_sum_within_n_percent = 0
 
     if name == 'token2':
         # Handle None values before arithmetic operations
         if all(x is not None for x in [best_bid, best_ask, second_best_bid, second_best_ask, top_bid, top_ask]):
             best_bid, second_best_bid, top_bid, best_ask, second_best_ask, top_ask = 1 - best_ask, 1 - second_best_ask, 1 - top_ask, 1 - best_bid, 1 - second_best_bid, 1 - top_bid
             best_bid_size, second_best_bid_size, best_ask_size, second_best_ask_size = best_ask_size, second_best_ask_size, best_bid_size, second_best_bid_size
-            bid_sum_within_n_percent, ask_sum_within_n_percent = ask_sum_within_n_percent, bid_sum_within_n_percent
-        else:
+        else:   
             # Handle case where some prices are None - use available values or defaults
             if best_bid is not None and best_ask is not None:
                 best_bid, best_ask = 1 - best_ask, 1 - best_bid
@@ -59,7 +47,6 @@ def get_best_bid_ask_deets(market, name, size, deviation_threshold=0.05):
                 top_bid = 1 - top_bid
             if top_ask is not None:
                 top_ask = 1 - top_ask
-            bid_sum_within_n_percent, ask_sum_within_n_percent = ask_sum_within_n_percent, bid_sum_within_n_percent
 
 
 
@@ -75,8 +62,6 @@ def get_best_bid_ask_deets(market, name, size, deviation_threshold=0.05):
         'second_best_ask': second_best_ask,
         'second_best_ask_size': second_best_ask_size,
         'top_ask': top_ask,
-        'bid_sum_within_n_percent': bid_sum_within_n_percent,
-        'ask_sum_within_n_percent': ask_sum_within_n_percent
     }
 
 
