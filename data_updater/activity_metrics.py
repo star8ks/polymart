@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Tuple
 from logan import Logan
 from configuration import TCNF
+from scipy import stats
 
 
 def get_market_trades_data(condition_id: str) -> pd.DataFrame:
@@ -68,6 +69,60 @@ def get_market_trades_data(condition_id: str) -> pd.DataFrame:
     except Exception as e:
         Logan.error(
             f"Error fetching trades data for market {condition_id}: {e}",
+            namespace="data_updater.activity_metrics",
+            exception=e
+        )
+        return pd.DataFrame()
+
+
+def get_market_price_history(token_id: str) -> pd.DataFrame:
+    """
+    Fetch price history for a given market (condition_id) over the configured lookback period.
+    
+    Args:
+        condition_id: The condition ID (market ID) to fetch price history for
+        
+    Returns:
+        DataFrame with price history including timestamps and prices
+    """
+    try:
+        # Calculate timestamp for lookback period
+        end_time = int(datetime.now().timestamp())
+        start_time = int((datetime.now() - timedelta(days=TCNF.ACTIVITY_LOOKBACK_DAYS)).timestamp())
+        
+        # Fetch price history from Polymarket CLOB API
+        url = "https://clob.polymarket.com/prices-history"
+        params = {
+            'market': token_id,
+            'startTs': start_time,
+            'endTs': end_time,
+            'fidelity': 10 # minutes
+        }
+        
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        
+        price_data = response.json()
+        if not price_data or 'history' not in price_data:
+            raise Exception(f"No price history found for market {token_id}")
+            
+        history = price_data['history']
+        if not history:
+            raise Exception(f"Empty price history for market {token_id}")
+        
+        # Convert to DataFrame
+        price_df = pd.DataFrame(history)
+        price_df['timestamp'] = pd.to_datetime(price_df['t'], unit='s')
+        price_df['price'] = pd.to_numeric(price_df['p'])
+        
+        # Sort by timestamp
+        price_df = price_df.sort_values('timestamp').reset_index(drop=True)
+        
+        return price_df[['timestamp', 'price']]
+        
+    except Exception as e:
+        Logan.error(
+            f"Error fetching price history for market {token_id}: {e}",
             namespace="data_updater.activity_metrics",
             exception=e
         )
@@ -185,7 +240,88 @@ def calculate_unique_participants(trades_df: pd.DataFrame) -> Dict[str, int]:
     }
 
 
-def calculate_market_activity_metrics(condition_id: str, best_bid: float, best_ask: float) -> Dict[str, float]:
+def calculate_order_arrival_rate_sensitivity(trades_df: pd.DataFrame, price_df: pd.DataFrame, price_df_token_id: str) -> float:
+    """
+    Calculate order arrival rate sensitivity (k parameter) from Avellaneda-Stoikov model.
+    
+    This function implements the exponential decrease of order arrivals as quotes move away
+    from the midprice: ln(freq(δ)) ≈ C - kδ
+    
+    Args:
+        trades_df: DataFrame with trade data including timestamps and prices
+        price_df: DataFrame with market price history including timestamps and prices
+        
+    Returns:
+        Float: arrival rate sensitivity k parameter
+    """
+    if trades_df.empty or price_df.empty:
+        return 0.0
+    
+    try:
+        # Merge trade data with closest price data
+        trade_distances = []
+        
+        for _, trade in trades_df.iterrows():
+            trade_time = trade['match_time']
+            
+            # Find the closest price timestamp
+            time_diff = abs(price_df['timestamp'] - trade_time)
+            closest_idx = time_diff.idxmin()
+            closest_price = price_df.loc[closest_idx, 'price']
+            
+            # Calculate half-distance from trade price to midprice
+            trade_price = trade['price']
+            mid_price = closest_price if trade['asset'] == price_df_token_id else 1 - closest_price
+            distance = abs(trade_price - mid_price)
+            
+            trade_distances.append(distance)
+        
+        if not trade_distances:
+            return 0.0
+        
+        # Convert to numpy array
+        distances = np.array(trade_distances)
+        bin_size = TCNF.ARRIVAL_RATE_BIN_SIZE
+        
+        # Create bins based on distance
+        max_distance = distances.max()
+        if max_distance == 0:
+            return 0.0
+        
+        bins = np.arange(0, max_distance + bin_size, bin_size)
+        bin_indices = np.digitize(distances, bins) - 1
+        
+        # Count trades in each bin
+        bin_counts = np.bincount(bin_indices, minlength=len(bins)-1)
+        
+        # Filter out bins with zero or very few trades
+        valid_indices = np.where(bin_counts >= 2)[0]
+        
+        if len(valid_indices) < 3:  # Need at least 3 points for meaningful fit
+            return 0.0
+
+        # Calculate bin midpoints and ln(frequency)
+        x_values = (valid_indices + 0.5) * bin_size
+        y_values = np.log(bin_counts[valid_indices])
+        
+        # Fit linear regression: ln(freq(δ)) = C - k*δ
+        slope, intercept, r_value, p_value, std_err = stats.linregress(x_values, y_values)
+        
+        # k is the negative of the slope
+        k_parameter = -slope
+        
+        return round(k_parameter, 4)
+        
+    except Exception as e:
+        Logan.error(
+            f"Error calculating order arrival rate sensitivity: {e}",
+            namespace="data_updater.activity_metrics",
+            exception=e
+        )
+        return 0.0
+
+
+def calculate_market_activity_metrics(condition_id: str, token_id: str, best_bid: float, best_ask: float) -> Dict[str, float]:
     """
     Calculate all activity metrics for a given market.
     
@@ -207,16 +343,21 @@ def calculate_market_activity_metrics(condition_id: str, best_bid: float, best_a
                 namespace="data_updater.activity_metrics"
             )
             
+        # Fetch price history for arrival rate sensitivity calculation
+        price_df = get_market_price_history(token_id)
+        
         # Calculate all metrics
         volume_metrics = calculate_volume_metrics(trades_df)
         frequency_metrics = calculate_trade_frequency(trades_df)
         participant_metrics = calculate_unique_participants(trades_df)
+        arrival_rate_sensitivity = calculate_order_arrival_rate_sensitivity(trades_df, price_df, token_id)
         
         # Combine all metrics
         all_metrics = {
             **volume_metrics,
             **frequency_metrics,
-            **participant_metrics
+            **participant_metrics,
+            'order_arrival_rate_sensitivity': arrival_rate_sensitivity
         }
 
         return all_metrics
@@ -242,6 +383,7 @@ def add_activity_metrics_to_market_data(market_row: Dict) -> Dict:
         Market row enhanced with activity metrics
     """
     condition_id = market_row.get('condition_id')
+    token_id = market_row.get('token1') # either token will do. We just use this for the price history
     best_bid = market_row.get('best_bid', 0)
     best_ask = market_row.get('best_ask', 0)
     
@@ -253,7 +395,7 @@ def add_activity_metrics_to_market_data(market_row: Dict) -> Dict:
         return market_row
     
     # Calculate metrics for the entire market over configured lookback period
-    activity_metrics = calculate_market_activity_metrics(condition_id, best_bid, best_ask)
+    activity_metrics = calculate_market_activity_metrics(condition_id, token_id, best_bid, best_ask)
     
     # Add metrics to market row
     enhanced_row = market_row.copy()

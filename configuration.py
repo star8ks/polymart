@@ -48,6 +48,11 @@ class TradingConfig:
     MIN_AVG_TRADES_PER_DAY = 6.0  # Minimum average trades per day
     MIN_UNIQUE_TRADERS = 5  # Minimum number of unique traders
     MIN_VOLUME_INSIDE_SPREAD = 400.0  # Minimum volume that occurred within spread bounds
+
+    # Avellaneda Stoikov parameters
+    RISK_AVERSION = 0.5
+    TIME_TO_HORIZON_HOURS = 24
+    ARRIVAL_RATE_BIN_SIZE = 0.02
     
 
 

@@ -18,3 +18,4 @@ asyncio
 requests
 google-auth
 web3
+scipy
