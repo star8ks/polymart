@@ -178,6 +178,28 @@ def set_position(token, side, size, price, source='websocket'):
         namespace="poly_data.data_utils"
     )
 
+def clear_all_orders():
+    """Clear all existing open orders on startup"""
+    try:
+        all_orders = global_state.client.get_all_orders()
+
+        if len(all_orders) > 0:
+            Logan.info(f"Clearing {len(all_orders)} existing orders on startup", namespace="poly_data.data_utils")
+
+            # Cancel orders by asset to be efficient
+            assets_to_cancel = set(all_orders['asset_id'].astype(str))
+            for asset_id in assets_to_cancel:
+                try:
+                    global_state.client.cancel_all_asset(asset_id)
+                    Logan.info(f"Cleared orders for asset {asset_id}", namespace="poly_data.data_utils")
+                except Exception as e:
+                    Logan.error(f"Error clearing orders for asset {asset_id}", namespace="poly_data.data_utils", exception=e)
+        else:
+            Logan.info("No existing orders to clear", namespace="poly_data.data_utils")
+
+    except Exception as e:
+        Logan.error(f"Error clearing all orders", namespace="poly_data.data_utils", exception=e)
+
 def update_orders():
     all_orders = global_state.client.get_all_orders()
 

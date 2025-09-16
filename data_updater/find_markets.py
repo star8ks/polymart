@@ -416,10 +416,10 @@ def get_all_markets_detailed(all_df: pd.DataFrame, client, max_workers=3, batch_
             namespace="data_updater.find_markets"
         )
         
-        # Rate limit: ensure a minimum 10s window per batch (processing time counts)
+        # Rate limit: ensure a minimum 15s window per batch (processing time counts)
         if i + batch_size < len(all_df):
             elapsed = time.perf_counter() - batch_start_time
-            remaining = max(0.0, 10.0 - elapsed)
+            remaining = max(0.0, 15.0 - elapsed)
             if remaining > 0:
                 Logan.info(
                     f"Waiting {remaining:.2f} seconds to respect rate limits...",

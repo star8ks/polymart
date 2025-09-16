@@ -7,7 +7,7 @@ from logan import Logan
 
 
 from poly_data.polymarket_client import PolymarketClient
-from poly_data.data_utils import update_markets, update_positions, update_orders, update_liquidity
+from poly_data.data_utils import update_markets, update_positions, update_orders, update_liquidity, clear_all_orders
 from poly_data.websocket_handlers import connect_market_websocket, connect_user_websocket
 import poly_data.global_state as global_state
 from poly_data.data_processing import remove_from_performing
@@ -94,6 +94,10 @@ async def main():
     # Initialize state and fetch initial data
     global_state.all_tokens = []
     update_once()
+
+    # Clear all existing orders on startup
+    clear_all_orders()
+
     Logan.info(f"After initial updates: orders={global_state.orders}, positions={global_state.positions}", namespace="init")
 
     Logan.info(f'There are {len(global_state.df)} markets, {len(global_state.positions)} positions and {len(global_state.orders)} orders. Starting positions: {global_state.positions}', namespace="init")
