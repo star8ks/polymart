@@ -175,6 +175,17 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
                 namespace="poly_data.market_selection"
             )
         
+        if 'order_arrival_rate_sensitivity' in df.columns:
+            df = df[df['order_arrival_rate_sensitivity'].fillna(0) >= TCNF.MIN_ARRIVAL_RATE_SENSITIVITY]
+            df = df[df['order_arrival_rate_sensitivity'].fillna(0) <= TCNF.MAX_ARRIVAL_RATE_SENSITIVITY]
+            avg_attractiveness = df['attractiveness_score'].mean() if len(df) > 0 else 0
+            avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
+            Logan.info(
+                f"After arrival rate sensitivity filter ({TCNF.MIN_ARRIVAL_RATE_SENSITIVITY} ≤ k ≤ {TCNF.MAX_ARRIVAL_RATE_SENSITIVITY}): {len(df)}/{initial_count} markets "
+                f"(avg attractiveness: {avg_attractiveness:.2f}, avg GM reward: {avg_gm_reward:.2f})",
+                namespace="poly_data.market_selection"
+            )
+        
         
         avg_attractiveness = df['attractiveness_score'].mean() if len(df) > 0 else 0
         avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0

@@ -297,7 +297,7 @@ def calculate_order_arrival_rate_sensitivity(trades_df: pd.DataFrame, price_df: 
         # Filter out bins with zero or very few trades
         valid_indices = np.where(bin_counts >= 2)[0]
         
-        if len(valid_indices) < 3:  # Need at least 3 points for meaningful fit
+        if len(valid_indices) < 5:  # Need at least 5 points for meaningful fit
             return 0.0
 
         # Calculate bin midpoints and ln(frequency)

@@ -87,7 +87,6 @@ async def main():
 
     if not args.nologan:
         Logan.init()
-        time.sleep(3)
 
     # Initialize client
     global_state.client = PolymarketClient(env_path=args.env)

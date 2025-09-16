@@ -240,8 +240,7 @@ async def perform_trade(market):
                
                 # Calculate optimal bid and ask prices based on market conditions
                 bid_price, ask_price = MarketStrategy.get_order_prices(
-                    best_bid, best_bid_size, best_ask, best_ask_size, 
-                    avgPrice, row, token, position
+                    best_bid, best_ask, avgPrice, row, token, row['tick_size'], force_sell=sell_only
                 )
 
                 bid_price = round(bid_price, round_length)
@@ -249,6 +248,7 @@ async def perform_trade(market):
 
                 # Calculate mid price for reference
                 mid_price = (top_bid + top_ask) / 2
+                Logan.debug(f"midPrice: {mid_price}, best_bid: {best_bid}, best_ask: {best_ask}, Bid price: {bid_price}, Ask price: {ask_price}", namespace="trading")
 
                 # Get position for the opposite token to calculate total exposure
                 other_token = global_state.REVERSE_TOKENS[str(token)]
