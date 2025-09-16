@@ -118,7 +118,6 @@ def test_configuration_values():
             TCNF.MIN_DECAY_WEIGHTED_VOLUME,
             TCNF.MIN_AVG_TRADES_PER_DAY,
             TCNF.MIN_UNIQUE_TRADERS,
-            TCNF.MIN_VOLUME_INSIDE_SPREAD
         ]
         
         Logan.info(f"Configuration values: ACTIVITY_LOOKBACK_DAYS={TCNF.ACTIVITY_LOOKBACK_DAYS}, "

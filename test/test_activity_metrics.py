@@ -23,7 +23,6 @@ def test_configuration_values():
             ("MIN_DECAY_WEIGHTED_VOLUME", TCNF.MIN_DECAY_WEIGHTED_VOLUME, float),
             ("MIN_AVG_TRADES_PER_DAY", TCNF.MIN_AVG_TRADES_PER_DAY, float),
             ("MIN_UNIQUE_TRADERS", TCNF.MIN_UNIQUE_TRADERS, int),
-            ("MIN_VOLUME_INSIDE_SPREAD", TCNF.MIN_VOLUME_INSIDE_SPREAD, float),
         ]
         
         for name, value, expected_type in config_tests:

@@ -31,7 +31,7 @@ class TradingConfig:
     MARKET_COUNT = 25
     
     # Risk management thresholds
-    MAX_VOLATILITY_SUM = 20.0
+    MAX_VOLATILITY_SUM = 16.0
     MIN_ATTRACTIVENESS_SCORE = 0.0
     MARKET_IMBALANCE_CALC_PCT = 0.3 # percentage of midpoint to include in imbalance calculation
     MARKET_IMBALANCE_CALC_LEVELS = 5 # number of price levels to include in imbalance calculation
@@ -42,13 +42,12 @@ class TradingConfig:
     DECAY_HALF_LIFE_HOURS = 24  # Half-life for decay weighting (hours)
     
     # Activity and volume filtering thresholds
-    MIN_TOTAL_VOLUME = 800.0  # Minimum total trading volume over lookback period
+    MIN_TOTAL_VOLUME = 1000.0  # Minimum total trading volume over lookback period
     MIN_VOLUME_USD = 0  # Minimum USD volume over lookback period
-    MIN_DECAY_WEIGHTED_VOLUME = 350.0  # Minimum decay-weighted volume (recent activity emphasized)
+    MIN_DECAY_WEIGHTED_VOLUME = 400.0  # Minimum decay-weighted volume (recent activity emphasized)
     MIN_AVG_TRADES_PER_DAY = 6.0  # Minimum average trades per day
     MIN_UNIQUE_TRADERS = 5  # Minimum number of unique traders
-    MIN_VOLUME_INSIDE_SPREAD = 400.0  # Minimum volume that occurred within spread bounds
-
+    
     # Avellaneda Stoikov parameters
     RISK_AVERSION = 0.5
     TIME_TO_HORIZON_HOURS = 24
