@@ -47,7 +47,7 @@ def update_positions(avgOnly=False):
                         old_size = position['size']
                     except Exception as e:
                         Logan.error(
-                            f"Error getting old position size for {asset}: {e}",
+                            f"Error getting old position size for {asset}",
                             namespace="poly_data.data_utils",
                             exception=e
                         )
@@ -70,7 +70,7 @@ def update_liquidity():
         global_state.available_liquidity = global_state.client.get_usdc_balance()
     except Exception as e:
         Logan.error(
-            f"Error updating liquidity: {e}",
+            f"Error updating liquidity",
             namespace="poly_data.data_utils",
             exception=e
         )
@@ -101,7 +101,7 @@ def get_total_balance():
         return total
     except Exception as e:
         Logan.error(
-            f"Error calculating total balance: {e}",
+            f"Error calculating total balance",
             namespace="poly_data.data_utils",
             exception=e
         )

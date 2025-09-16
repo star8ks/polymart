@@ -65,7 +65,7 @@ def test_activity_metrics_calculation():
         return True
         
     except Exception as e:
-        Logan.error(f"Activity metrics test failed: {e}", namespace="test_market_selection", exception=e)
+        Logan.error(f"Activity metrics test failed", namespace="test_market_selection", exception=e)
         return False
 
 def test_market_filtering():
@@ -100,7 +100,7 @@ def test_market_filtering():
         return True
         
     except Exception as e:
-        Logan.error(f"Market filtering test failed: {e}", namespace="test_market_selection", exception=e)
+        Logan.error(f"Market filtering test failed", namespace="test_market_selection", exception=e)
         return False
 
 def test_configuration_values():
@@ -130,7 +130,7 @@ def test_configuration_values():
         return True
         
     except Exception as e:
-        Logan.error(f"Configuration test failed: {e}", namespace="test_market_selection", exception=e)
+        Logan.error(f"Configuration test failed", namespace="test_market_selection", exception=e)
         return False
 
 def main():

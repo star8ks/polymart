@@ -217,7 +217,7 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
         write_selected_markets_to_sheet(result)
     except Exception as e:
         Logan.error(
-            f"Failed to write selected markets to sheet: {e}",
+            f"Failed to write selected markets to sheet",
             namespace="poly_data.market_selection",
             exception=e
         )
@@ -253,7 +253,7 @@ def write_selected_markets_to_sheet(selected_df: pd.DataFrame):
         )
     except Exception as e:
         Logan.error(
-            f"Error writing to Selected Markets sheet: {e}",
+            f"Error writing to Selected Markets sheet",
             namespace="poly_data.market_selection", 
             exception=e
         )
@@ -283,7 +283,7 @@ def calculate_position_sizes():
         global_state.market_trade_sizes = redistribute_for_bounds(global_state.market_trade_sizes, floors, ceilings)
     except Exception as e:
         Logan.error(
-            f"Error redistributing for bounds: {e}",
+            f"Error redistributing for bounds",
             namespace="poly_data.market_selection",
             exception=e
         )

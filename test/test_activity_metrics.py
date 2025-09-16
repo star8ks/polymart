@@ -34,7 +34,7 @@ def test_configuration_values():
         return True
         
     except Exception as e:
-        print(f"Configuration test failed: {e}")
+        print(f"Configuration test failed")
         return False
 
 def test_activity_metrics_imports():
@@ -65,7 +65,7 @@ def test_activity_metrics_imports():
         return True
         
     except Exception as e:
-        print(f"Import test failed: {e}")
+        print(f"Import test failed")
         return False
 
 def test_market_filtering_logic():
@@ -121,7 +121,7 @@ def test_market_filtering_logic():
         return True
         
     except Exception as e:
-        print(f"Filtering logic test failed: {e}")
+        print(f"Filtering logic test failed")
         return False
 
 def main():

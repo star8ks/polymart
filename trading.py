@@ -199,7 +199,7 @@ async def perform_trade(market):
                     try:
                         client.merge_positions(amount_to_merge_raw, market, row['neg_risk'] == 'TRUE')
                     except Exception as e:
-                        Logan.error(f"Error merging {amount_to_merge_raw} positions for market \"{get_readable_from_condition_id(market)}\": {e}", namespace="trading", exception=e)
+                        Logan.error(f"Error merging {amount_to_merge_raw} positions for market \"{get_readable_from_condition_id(market)}\"", namespace="trading", exception=e)
                 
                 # TODO: for now, let it get updated by the background task
                 # Update our local position tracking

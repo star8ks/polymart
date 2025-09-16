@@ -32,7 +32,7 @@ def get_all_markets(client) -> pd.DataFrame:
                 break
         except Exception as e:
             Logan.error(
-                f"Error fetching market batch with cursor '{cursor}': {e}",
+                f"Error fetching market batch with cursor '{cursor}'",
                 namespace="data_updater.find_markets",
                 exception=e
             )
@@ -228,7 +228,7 @@ def process_market_row(row, client):
         bids = pd.DataFrame(book.bids).astype(float)
     except Exception as e:
         Logan.error(
-            f"Error processing bids for token {token1}: {e}",
+            f"Error processing bids for token {token1}",
             namespace="data_updater.find_markets",
             exception=e
         )
@@ -237,7 +237,7 @@ def process_market_row(row, client):
         asks = pd.DataFrame(book.asks).astype(float)
     except Exception as e:
         Logan.error(
-            f"Error processing asks for token {token1}: {e}",
+            f"Error processing asks for token {token1}",
             namespace="data_updater.find_markets",
             exception=e
         )
@@ -247,7 +247,7 @@ def process_market_row(row, client):
         ret['best_bid'] = bids.iloc[-1]['price'] if not bids.empty else 0
     except Exception as e:
         Logan.error(
-            f"Error getting best bid for token {token1}: {e}",
+            f"Error getting best bid for token {token1}",
             namespace="data_updater.find_markets",
             exception=e
         )
@@ -257,7 +257,7 @@ def process_market_row(row, client):
         ret['best_ask'] = asks.iloc[-1]['price'] if not asks.empty else 1
     except Exception as e:
         Logan.error(
-            f"Error getting best ask for token {token1}: {e}",
+            f"Error getting best ask for token {token1}",
             namespace="data_updater.find_markets",
             exception=e
         )
@@ -281,7 +281,7 @@ def process_market_row(row, client):
         bids_df = bids_df.merge(bids, on='price', how='left').fillna(0)
     except Exception as e:
         Logan.error(
-            f"Error merging bids data for token {token1}: {e}",
+            f"Error merging bids data for token {token1}",
             namespace="data_updater.find_markets",
             exception=e
         )
@@ -291,7 +291,7 @@ def process_market_row(row, client):
         asks_df = asks_df.merge(asks, on='price', how='left').fillna(0)
     except Exception as e:
         Logan.error(
-            f"Error merging asks data for token {token1}: {e}",
+            f"Error merging asks data for token {token1}",
             namespace="data_updater.find_markets",
             exception=e
         )
@@ -305,7 +305,7 @@ def process_market_row(row, client):
         best_bid_reward = round(ret_bid['reward_per_100'].max(), 2)
     except Exception as e:
         Logan.error(
-            f"Error calculating bid rewards for token {token1}: {e}",
+            f"Error calculating bid rewards for token {token1}",
             namespace="data_updater.find_markets",
             exception=e
         )
@@ -318,7 +318,7 @@ def process_market_row(row, client):
         best_ask_reward = round(ret_ask['reward_per_100'].max(), 2)
     except Exception as e:
         Logan.error(
-            f"Error calculating ask rewards for token {token1}: {e}",
+            f"Error calculating ask rewards for token {token1}",
             namespace="data_updater.find_markets",
             exception=e
         )
@@ -360,7 +360,7 @@ def process_market_row(row, client):
         ret.update(volatility_data)
     except Exception as e:
         Logan.error(
-            f"Error adding volatility data for token {token1}: {e}",
+            f"Error adding volatility data for token {token1}",
             namespace="data_updater.find_markets",
             exception=e
         )
@@ -372,7 +372,7 @@ def process_market_row(row, client):
         ret = add_activity_metrics_to_market_data(ret)
     except Exception as e:
         Logan.error(
-            f"Error adding activity metrics for token {token1}: {e}",
+            f"Error adding activity metrics for token {token1}",
             namespace="data_updater.find_markets",
             exception=e
         )
@@ -390,7 +390,7 @@ def get_all_markets_detailed(all_df: pd.DataFrame, client, max_workers=3, batch_
             return process_market_row(row, client)
         except Exception as e:
             Logan.error(
-                f"Error fetching market data for {row.get('question', 'unknown market')}: {e}",
+                f"Error fetching market data for {row.get('question', 'unknown market')}",
                 namespace="data_updater.find_markets",
                 exception=e
             )

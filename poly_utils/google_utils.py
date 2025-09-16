@@ -145,7 +145,7 @@ class ReadOnlyWorksheet:
             
         except Exception as e:
             Logan.error(
-                f"Error in get_all_records for Google Sheet '{self.title}': {e}",
+                f"Error in get_all_records for Google Sheet '{self.title}'",
                 namespace="poly_utils.google_utils",
                 exception=e
             )
@@ -169,7 +169,7 @@ class ReadOnlyWorksheet:
             
         except Exception as e:
             Logan.error(
-                f"Error in get_all_values for Google Sheet '{self.title}': {e}",
+                f"Error in get_all_values for Google Sheet '{self.title}'",
                 namespace="poly_utils.google_utils",
                 exception=e
             )

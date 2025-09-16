@@ -40,9 +40,9 @@ def remove_from_pending():
                         Logan.info(f"Removing stale entry {trade_id} from {col} after 15 seconds", namespace="cleanup")
                         remove_from_performing(col, trade_id)
                 except Exception as e:
-                    Logan.error(f"Error removing stale trade {trade_id} from {col}: {e}", namespace="cleanup", exception=e)
+                    Logan.error(f"Error removing stale trade {trade_id} from {col}", namespace="cleanup", exception=e)
     except Exception as e:
-        Logan.error(f"Error in remove_from_pending function while cleaning stale trades: {e}", namespace="cleanup", exception=e)
+        Logan.error(f"Error in remove_from_pending function while cleaning stale trades", namespace="cleanup", exception=e)
 
 def update_periodically():
     """
@@ -71,7 +71,7 @@ def update_periodically():
             gc.collect()  # Force garbage collection to free memory
             i += 1
         except Exception as e:
-            Logan.error(f"Error in update_periodically background thread (cycle {i}): {e}", namespace="updater", exception=e)
+            Logan.error(f"Error in update_periodically background thread (cycle {i})", namespace="updater", exception=e)
             
 async def main():
     """
@@ -116,7 +116,7 @@ async def main():
             )
             Logan.info("Reconnecting to the websocket", namespace="websocket")
         except Exception as e:
-            Logan.error(f"Error in main websocket connection loop: {e}", namespace="websocket", exception=e)
+            Logan.error(f"Error in main websocket connection loop", namespace="websocket", exception=e)
             
         await asyncio.sleep(1)
         gc.collect()  # Clean up memory

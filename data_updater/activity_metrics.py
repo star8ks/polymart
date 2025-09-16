@@ -68,7 +68,7 @@ def get_market_trades_data(condition_id: str) -> pd.DataFrame:
         
     except Exception as e:
         Logan.error(
-            f"Error fetching trades data for market {condition_id}: {e}",
+            f"Error fetching trades data for market {condition_id}",
             namespace="data_updater.activity_metrics",
             exception=e
         )
@@ -122,7 +122,7 @@ def get_market_price_history(token_id: str) -> pd.DataFrame:
         
     except Exception as e:
         Logan.error(
-            f"Error fetching price history for market {token_id}: {e}",
+            f"Error fetching price history for market {token_id}",
             namespace="data_updater.activity_metrics",
             exception=e
         )
@@ -314,7 +314,7 @@ def calculate_order_arrival_rate_sensitivity(trades_df: pd.DataFrame, price_df: 
         
     except Exception as e:
         Logan.error(
-            f"Error calculating order arrival rate sensitivity: {e}",
+            f"Error calculating order arrival rate sensitivity",
             namespace="data_updater.activity_metrics",
             exception=e
         )
@@ -364,7 +364,7 @@ def calculate_market_activity_metrics(condition_id: str, token_id: str, best_bid
         
     except Exception as e:
         Logan.error(
-            f"Error calculating activity metrics for market {condition_id}: {e}",
+            f"Error calculating activity metrics for market {condition_id}",
             namespace="data_updater.activity_metrics",
             exception=e
         )
