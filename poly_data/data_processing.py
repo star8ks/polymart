@@ -32,6 +32,13 @@ def process_price_change(asset, side, price_level, new_size):
 
 def process_data(json_datas, trade=True):
 
+    # Check if json_datas is a dict or a list of dicts
+    if isinstance(json_datas, dict):
+        json_datas = [json_datas]
+    elif not isinstance(json_datas, list):
+        Logan.error(f"Expected dict or list of dicts, got: {type(json_datas)}", namespace="poly_data.data_processing")
+        return
+
     for json_data in json_datas:
         event_type = json_data['event_type']
         asset = json_data['market']
@@ -74,6 +81,11 @@ def remove_from_performing(col, id):
         global_state.performing_timestamps[col].pop(id, None)
 
 def process_user_data(rows):
+    if isinstance(rows, dict):
+        rows = [rows]
+    elif not isinstance(rows, list):
+        Logan.error(f"Expected dict or list of dicts, got: {type(rows)}", namespace="poly_data.data_processing")
+        return
 
     for row in rows:
         market = row['market']
