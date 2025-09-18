@@ -166,6 +166,9 @@ async def perform_trade(market):
             if global_state.available_liquidity < total_balance * (1 - TCNF.SELL_ONLY_THRESHOLD):
                 sell_only = True
             
+            # TODO: Cleaning up the merijjeyn account, remove this
+            sell_only = True
+            
             # Determine decimal precision from tick size
             round_length = len(str(row['tick_size']).split(".")[1])
 
@@ -248,7 +251,6 @@ async def perform_trade(market):
 
                 # Calculate mid price for reference
                 mid_price = (top_bid + top_ask) / 2
-                Logan.debug(f"midPrice: {mid_price}, best_bid: {best_bid}, best_ask: {best_ask}, Bid price: {bid_price}, Ask price: {ask_price}", namespace="trading")
 
                 # Get position for the opposite token to calculate total exposure
                 other_token = global_state.REVERSE_TOKENS[str(token)]

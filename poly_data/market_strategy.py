@@ -85,7 +85,7 @@ class MarketStrategy:
         volatility = row['volatility_sum']
         risk_aversion = TCNF.RISK_AVERSION
         time_to_horizon = TCNF.TIME_TO_HORIZON_HOURS
-        factor = 0.00000002 # Simply to scale the values to a reasonable range
+        factor = 0.00000003 # Simply to scale the values to a reasonable range
         # Logan.debug(f"Inventory: {inventory}, Volatility: {volatility}, Risk aversion: {risk_aversion}, Time to horizon: {time_to_horizon}, imbalance: {row['market_order_imbalance']}, Factor: {factor}", namespace="market_strategy")
         return mid_price - factor * inventory * risk_aversion * (volatility**2) * time_to_horizon
     

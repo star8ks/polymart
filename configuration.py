@@ -47,10 +47,10 @@ class TradingConfig:
     MIN_DECAY_WEIGHTED_VOLUME = 400.0  # Minimum decay-weighted volume (recent activity emphasized)
     MIN_AVG_TRADES_PER_DAY = 6.0  # Minimum average trades per day
     MIN_UNIQUE_TRADERS = 5  # Minimum number of unique traders
-    
+
     # Avellaneda Stoikov parameters
-    RISK_AVERSION = 0.5
-    TIME_TO_HORIZON_HOURS = 24
+    RISK_AVERSION = 0.6
+    TIME_TO_HORIZON_HOURS = 12
     ARRIVAL_RATE_BIN_SIZE = 0.01
     MIN_ARRIVAL_RATE_SENSITIVITY = 1.0
     MAX_ARRIVAL_RATE_SENSITIVITY = 80.0
