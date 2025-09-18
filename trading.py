@@ -166,9 +166,6 @@ async def perform_trade(market):
             if global_state.available_liquidity < total_balance * (1 - TCNF.SELL_ONLY_THRESHOLD):
                 sell_only = True
             
-            # TODO: Cleaning up the merijjeyn account, remove this
-            sell_only = True
-            
             # Determine decimal precision from tick size
             round_length = len(str(row['tick_size']).split(".")[1])
 

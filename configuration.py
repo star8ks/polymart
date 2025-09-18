@@ -50,7 +50,7 @@ class TradingConfig:
 
     # Avellaneda Stoikov parameters
     RISK_AVERSION = 0.6
-    TIME_TO_HORIZON_HOURS = 12
+    TIME_TO_HORIZON_HOURS = 16
     ARRIVAL_RATE_BIN_SIZE = 0.01
     MIN_ARRIVAL_RATE_SENSITIVITY = 1.0
     MAX_ARRIVAL_RATE_SENSITIVITY = 80.0
