@@ -94,10 +94,6 @@ class ReadOnlyWorksheet:
             
             for csv_url in urls_to_try:
                 try:
-                    Logan.debug(
-                        f"Trying to fetch sheet '{self.title}' from: {csv_url}",
-                        namespace="poly_utils.google_utils"
-                    )
                     response = requests.get(csv_url, timeout=MCNF.HTTP_TIMEOUT)
                     response.raise_for_status()
                     

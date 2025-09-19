@@ -55,8 +55,6 @@ class MarketStrategy:
         bid_price = reservation_price - optimal_spread/2
         ask_price = reservation_price + optimal_spread/2
 
-        # Logan.debug(f"force sell: {force_sell}, avgPrice: {avgPrice}, Reservation price: {reservation_price}, Optimal spread: {optimal_spread}, Bid price: {bid_price}, Ask price: {ask_price}", namespace="market_strategy")
-
         # Safety guards
         if avgPrice > 0.9 or avgPrice < 0.1 or bid_price >= ask_price:
             bid_price = best_bid
@@ -73,8 +71,6 @@ class MarketStrategy:
         if force_sell and bid_price >= best_bid: 
             bid_price = best_bid - tick
 
-        # Logan.debug(f"After safety guards: Bid price: {bid_price}, Ask price: {ask_price}", namespace="market_strategy")
-        
         return bid_price, ask_price
 
     @classmethod
@@ -86,7 +82,6 @@ class MarketStrategy:
         risk_aversion = TCNF.RISK_AVERSION
         time_to_horizon = TCNF.TIME_TO_HORIZON_HOURS
         factor = 0.00000003 # Simply to scale the values to a reasonable range
-        # Logan.debug(f"Inventory: {inventory}, Volatility: {volatility}, Risk aversion: {risk_aversion}, Time to horizon: {time_to_horizon}, imbalance: {row['market_order_imbalance']}, Factor: {factor}", namespace="market_strategy")
         return mid_price - factor * inventory * risk_aversion * (volatility**2) * time_to_horizon
     
     @classmethod
@@ -102,7 +97,6 @@ class MarketStrategy:
         volatility = row['volatility_sum']
         arrival_sensitivity = max(row['order_arrival_rate_sensitivity'], 1)
 
-        # Logan.debug(f"Risk aversion: {risk_aversion}, Time to horizon: {time_to_horizon}, Volatility: {volatility}, Arrival sensitivity: {arrival_sensitivity}", namespace="market_strategy")
         factor = 0.000025 # Simply to scale the values to a reasonable range
         left = risk_aversion * (volatility**2) * time_to_horizon
         right = (2/risk_aversion) * log(1 + (risk_aversion / arrival_sensitivity))

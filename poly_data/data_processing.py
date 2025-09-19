@@ -9,14 +9,14 @@ import asyncio
 from poly_data.data_utils import set_position, set_order, update_positions
 from logan import Logan
 
-def process_book_data(asset, json_data):
-    global_state.all_data[asset] = {
+def process_book_data(market, json_data):
+    global_state.all_data[market] = {
         'bids': SortedDict(),
         'asks': SortedDict()
     }
 
-    global_state.all_data[asset]['bids'].update({float(entry['price']): float(entry['size']) for entry in json_data['bids']})
-    global_state.all_data[asset]['asks'].update({float(entry['price']): float(entry['size']) for entry in json_data['asks']})
+    global_state.all_data[market]['bids'].update({float(entry['price']): float(entry['size']) for entry in json_data['bids']})
+    global_state.all_data[market]['asks'].update({float(entry['price']): float(entry['size']) for entry in json_data['asks']})
 
 def process_price_change(asset, side, price_level, new_size):
     if side == 'bids':
@@ -31,7 +31,6 @@ def process_price_change(asset, side, price_level, new_size):
         book[price_level] = new_size
 
 def process_data(json_datas, trade=True):
-
     # Check if json_datas is a dict or a list of dicts
     if isinstance(json_datas, dict):
         json_datas = [json_datas]
@@ -41,26 +40,23 @@ def process_data(json_datas, trade=True):
 
     for json_data in json_datas:
         event_type = json_data['event_type']
-        asset = json_data['market']
+        market = json_data['market']
 
         if event_type == 'book':
-            process_book_data(asset, json_data)
+            process_book_data(market, json_data)
 
             if trade:
-                asyncio.create_task(perform_trade(asset))
+                asyncio.create_task(perform_trade(market))
                 
         elif event_type == 'price_change':
-            for data in json_data['changes']:
+            for data in json_data['price_changes']:
                 side = 'bids' if data['side'] == 'BUY' else 'asks'
                 price_level = float(data['price'])
                 new_size = float(data['size'])
-                process_price_change(asset, side, price_level, new_size)
+                process_price_change(market, side, price_level, new_size)
 
                 if trade:
-                    asyncio.create_task(perform_trade(asset))
-        
-
-        # pretty_print(f'Received book update for {asset}:', global_state.all_data[asset])
+                    asyncio.create_task(perform_trade(market))
 
 def add_to_performing(col, id):
     if col not in global_state.performing:
@@ -81,6 +77,7 @@ def remove_from_performing(col, id):
         global_state.performing_timestamps[col].pop(id, None)
 
 def process_user_data(rows):
+    Logan.debug(f"Processing user data, rows: {rows}", namespace="poly_data.data_processing")
     if isinstance(rows, dict):
         rows = [rows]
     elif not isinstance(rows, list):
@@ -148,19 +145,6 @@ def process_user_data(rows):
                             f"Confirmed. Performing is {len(global_state.performing[col])}",
                             namespace="poly_data.data_processing"
                         )
-                        Logan.debug(
-                            f"Last trade update is {global_state.last_trade_update}",
-                            namespace="poly_data.data_processing"
-                        )
-                        Logan.debug(
-                            f"Performing is {global_state.performing}",
-                            namespace="poly_data.data_processing"
-                        )
-                        Logan.debug(
-                            f"Performing timestamps is {global_state.performing_timestamps}",
-                            namespace="poly_data.data_processing"
-                        )
-                        
                         asyncio.create_task(perform_trade(market))
 
                 elif row['status'] == 'MATCHED':
@@ -173,18 +157,6 @@ def process_user_data(rows):
                     set_position(token, side, size, price)
                     Logan.info(
                         f"Position after matching is {global_state.positions[str(token)]}",
-                        namespace="poly_data.data_processing"
-                    )
-                    Logan.debug(
-                        f"Last trade update is {global_state.last_trade_update}",
-                        namespace="poly_data.data_processing"
-                    )
-                    Logan.debug(
-                        f"Performing is {global_state.performing}",
-                        namespace="poly_data.data_processing"
-                    )
-                    Logan.debug(
-                        f"Performing timestamps is {global_state.performing_timestamps}",
                         namespace="poly_data.data_processing"
                     )
                     asyncio.create_task(perform_trade(market))
