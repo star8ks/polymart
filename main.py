@@ -106,20 +106,11 @@ async def main():
     update_thread = threading.Thread(target=update_periodically, daemon=True)
     update_thread.start()
     
-    # Main loop - maintain websocket connections
-    while True:
-        try:
-            # Connect to market and user websockets simultaneously
-            await asyncio.gather(
-                connect_market_websocket(global_state.all_tokens), 
-                connect_user_websocket()
-            )
-            Logan.info("Reconnecting to the websocket", namespace="websocket")
-        except Exception as e:
-            Logan.error(f"Error in main websocket connection loop", namespace="websocket", exception=e)
-            
-        await asyncio.sleep(1)
-        gc.collect()  # Clean up memory
-
+    # Websocket connections. Each connection has an internal loop that will attempt to reconnect if the connection is lost.
+    await asyncio.gather(
+        connect_market_websocket(global_state.all_tokens), 
+        connect_user_websocket()
+    )
+    
 if __name__ == "__main__":
     asyncio.run(main())
