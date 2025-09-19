@@ -77,7 +77,8 @@ class MarketStrategy:
     def calculate_reservation_price(cls, best_bid, best_ask, row, token) -> float:
         pos = get_position(token)
         inventory = pos['size']
-        mid_price = cls.calculate_weighted_mid_price(best_bid, best_ask, row['market_order_imbalance'])
+        imbalance = row.get('market_order_imbalance', 0)
+        mid_price = cls.calculate_weighted_mid_price(best_bid, best_ask, imbalance)
         volatility = row['volatility_sum']
         risk_aversion = TCNF.RISK_AVERSION
         time_to_horizon = TCNF.TIME_TO_HORIZON_HOURS
