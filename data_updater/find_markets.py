@@ -471,6 +471,10 @@ def cleanup_all_markets(df: pd.DataFrame) -> pd.DataFrame:
     df = df.replace([np.inf, -np.inf], 0)
     df = df.sort_values('attractiveness_score', ascending=False)
 
+    columns_to_fill_0 = ['market_order_imbalance', 'gm_reward_per_100', 'sm_reward_per_100', 'bid_reward_per_100', 'ask_reward_per_100']
+    for col in columns_to_fill_0:
+        df[col] = df[col].fillna(0)
+
     # Bring up important columns to front
     first_columns = [
         'question', 'answer1', 'answer2', 'attractiveness_score', 'spread', 'market_order_imbalance', 'rewards_daily_rate', 

@@ -172,8 +172,8 @@ def process_user_data(rows):
                 set_order(token, side, float(row['original_size']) - float(row['size_matched']), row['price'])
                 asyncio.create_task(perform_trade(market))
 
-    else:
-        Logan.warn(
-            f"User data received for {market} but its not in reverse tokens",
-            namespace="poly_data.data_processing"
-        )
+        else:
+            Logan.warn(
+                f"User data received for {market} but its not in reverse tokens",
+                namespace="poly_data.data_processing"
+            )
