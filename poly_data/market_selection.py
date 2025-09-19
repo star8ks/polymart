@@ -282,7 +282,7 @@ def calculate_position_sizes():
     try:
         global_state.market_trade_sizes = redistribute_for_bounds(global_state.market_trade_sizes, floors, ceilings)
     except Exception as e:
-        Logan.error(
+        Logan.warn(
             f"Error redistributing for bounds",
             namespace="poly_data.market_selection",
             exception=e
