@@ -49,8 +49,8 @@ class TradingConfig:
     MIN_UNIQUE_TRADERS = 5  # Minimum number of unique traders
 
     # Avellaneda Stoikov parameters
-    RISK_AVERSION = 0.6
-    TIME_TO_HORIZON_HOURS = 16
+    RISK_AVERSION = 0.5
+    TIME_TO_HORIZON_HOURS = 24
     ARRIVAL_RATE_BIN_SIZE = 0.01
     MIN_ARRIVAL_RATE_SENSITIVITY = 1.0
     MAX_ARRIVAL_RATE_SENSITIVITY = 80.0

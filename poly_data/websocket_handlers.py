@@ -1,4 +1,5 @@
 import asyncio                      # Asynchronous I/O
+import gc
 import json                        # JSON handling
 import websockets                  # WebSocket client
 from logan import Logan
@@ -20,42 +21,44 @@ async def connect_market_websocket(chunk):
         chunk (list): List of token IDs to subscribe to
         
     Notes:
-        If the connection is lost, the function will exit and the main loop will
-        attempt to reconnect after a short delay.
+        If the connection is lost, the while loop will attempt to reconnect
     """
     uri = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
-    async with websockets.connect(uri, ping_interval=MCNF.WEBSOCKET_PING_INTERVAL, ping_timeout=None) as websocket:
-        # Prepare and send subscription message
-        message = {"assets_ids": chunk}
-        await websocket.send(json.dumps(message))
+    while True:
+        async with websockets.connect(uri, ping_interval=MCNF.WEBSOCKET_PING_INTERVAL, ping_timeout=None) as websocket:
+            # Prepare and send subscription message
+            message = {"assets_ids": chunk}
+            await websocket.send(json.dumps(message))
 
-        Logan.info(
-            f"Sent market subscription message: {message}",
-            namespace="websocket_handlers"
-        )
+            Logan.info(
+                f"Sent market subscription message: {message}",
+                namespace="websocket_handlers"
+            )
 
-        try:
-            # Process incoming market data indefinitely
-            while True:
-                message = await websocket.recv()
-                json_data = json.loads(message)
-                # Process order book updates and trigger trading as needed
-                process_data(json_data)
-        except websockets.ConnectionClosed as e:
-            Logan.error(
-                "Market websocket connection closed unexpectedly",
-                namespace="websocket_handlers",
-                exception=e
-            )
-        except Exception as e:
-            Logan.error(
-                f"Unexpected error in market websocket connection",
-                namespace="websocket_handlers",
-                exception=e
-            )
-        finally:
-            # Brief delay before attempting to reconnect
-            await asyncio.sleep(5)
+            try:
+                # Process incoming market data indefinitely
+                while True:
+                    message = await websocket.recv()
+                    json_data = json.loads(message)
+                    # Process order book updates and trigger trading as needed
+                    process_data(json_data)
+            except websockets.ConnectionClosed as e:
+                Logan.error(
+                    "Market websocket connection closed unexpectedly",
+                    namespace="websocket_handlers",
+                    exception=e
+                )
+            except Exception as e:
+                Logan.error(
+                    f"Unexpected error in market websocket connection",
+                    namespace="websocket_handlers",
+                    exception=e
+                )
+            finally:
+                # Brief delay before attempting to reconnect
+                await asyncio.sleep(3)
+                gc.collect()
+
 
 async def connect_user_websocket():
     """
@@ -72,44 +75,47 @@ async def connect_user_websocket():
     """
     uri = "wss://ws-subscriptions-clob.polymarket.com/ws/user"
 
-    async with websockets.connect(uri, ping_interval=MCNF.WEBSOCKET_PING_INTERVAL, ping_timeout=None) as websocket:
-        # Prepare authentication message with API credentials
-        message = {
-            "type": "user",
-            "auth": {
-                "apiKey": global_state.client.client.creds.api_key, 
-                "secret": global_state.client.client.creds.api_secret,  
-                "passphrase": global_state.client.client.creds.api_passphrase
+    while True:
+        async with websockets.connect(uri, ping_interval=MCNF.WEBSOCKET_PING_INTERVAL, ping_timeout=None) as websocket:
+            # Prepare authentication message with API credentials
+            message = {
+                "type": "user",
+                "auth": {
+                    "apiKey": global_state.client.client.creds.api_key, 
+                    "secret": global_state.client.client.creds.api_secret,  
+                    "passphrase": global_state.client.client.creds.api_passphrase
+                }
             }
-        }
 
-        # Send authentication message
-        await websocket.send(json.dumps(message))
+            # Send authentication message
+            await websocket.send(json.dumps(message))
 
-        Logan.info(
-            "Sent user subscription message",
-            namespace="websocket_handlers"
-        )
-
-        try:
-            # Process incoming user data indefinitely
-            while True:
-                message = await websocket.recv()
-                json_data = json.loads(message)
-                # Process trade and order updates
-                process_user_data(json_data)
-        except websockets.ConnectionClosed as e:
-            Logan.error(
-                "User websocket connection closed unexpectedly",
-                namespace="websocket_handlers",
-                exception=e
+            Logan.info(
+                "Sent user subscription message",
+                namespace="websocket_handlers"
             )
-        except Exception as e:
-            Logan.error(
-                f"Unexpected error in user websocket connection",
-                namespace="websocket_handlers",
-                exception=e
-            )
-        finally:
-            # Brief delay before attempting to reconnect
-            await asyncio.sleep(5)
+
+            try:
+                # Process incoming user data indefinitely
+                while True:
+                    message = await websocket.recv()
+                    Logan.debug(f"Received user data, message: {message}", namespace="websocket_handlers")
+                    json_data = json.loads(message)
+                    # Process trade and order updates
+                    process_user_data(json_data)
+            except websockets.ConnectionClosed as e:
+                Logan.error(
+                    "User websocket connection closed unexpectedly",
+                    namespace="websocket_handlers",
+                    exception=e
+                )
+            except Exception as e:
+                Logan.error(
+                    f"Unexpected error in user websocket connection",
+                    namespace="websocket_handlers",
+                    exception=e
+                )
+            finally:
+                # Brief delay before attempting to reconnect
+                await asyncio.sleep(3)
+                gc.collect()
