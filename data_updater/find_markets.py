@@ -102,12 +102,13 @@ def generate_numbers(start, end, TICK_SIZE):
 def add_formula_params(curr_df, midpoint, v, daily_reward):
     curr_df['s'] = (curr_df['price'] - midpoint).abs()
     curr_df['S'] = ((v - curr_df['s']) / v) ** 2
+    curr_df['S'] = curr_df['S'].where(curr_df['s'] <= v, 0)  # Set to 0 when s > v
+    
     curr_df['100'] = 1/curr_df['price'] * 100
-
     curr_df['size'] = curr_df['size'] + curr_df['100']
 
     curr_df['Q'] = curr_df['S'] * curr_df['size']
-    curr_df['reward_per_100'] = (curr_df['Q'] / curr_df['Q'].sum()) * daily_reward / 2 / curr_df['size'] * curr_df['100']
+    curr_df['reward_per_100'] = (curr_df['Q'] / curr_df['Q'].sum()) * daily_reward / 2 / (curr_df['size'] * curr_df['100'])
     return curr_df
 
 def calculate_market_depth(bids_df, asks_df, midpoint, s_max):
