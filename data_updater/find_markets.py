@@ -99,28 +99,31 @@ def generate_numbers(start, end, TICK_SIZE):
 
     return numbers
 
-def add_formula_params(curr_df, midpoint, v, daily_reward):
+# TODO: This reward calculation is awful. Reevaluate it. 
+def calculate_reward_per_100(curr_df, midpoint, max_spread, daily_reward):
+    max_spread_usd = round((max_spread / 100), 2)
     curr_df['s'] = (curr_df['price'] - midpoint).abs()
-    curr_df['S'] = ((v - curr_df['s']) / v) ** 2
-    curr_df['S'] = curr_df['S'].where(curr_df['s'] <= v, 0)  # Set to 0 when s > v
+    curr_df['S'] = ((max_spread_usd - curr_df['s']) / max_spread_usd) ** 2
+    # curr_df['S'] = curr_df['S'].where(curr_df['s'] <= v, 0)  # Set to 0 when s > v
     
     curr_df['100'] = 1/curr_df['price'] * 100
     curr_df['size'] = curr_df['size'] + curr_df['100']
 
     curr_df['Q'] = curr_df['S'] * curr_df['size']
-    curr_df['reward_per_100'] = (curr_df['Q'] / curr_df['Q'].sum()) * daily_reward / 2 / (curr_df['size'] * curr_df['100'])
+    curr_df['reward_per_100'] = (curr_df['Q'] / curr_df['Q'].sum()) * daily_reward / 2 / curr_df['size'] * curr_df['100']
     return curr_df
 
-def calculate_market_depth(bids_df, asks_df, midpoint, s_max):
+def calculate_market_depth(bids_df, asks_df, midpoint, max_spread):
+    max_spread_usd = round((max_spread / 100), 2)
     """Calculate depth_yes_in and depth_no_in based on midpoint and s_max"""
     depth_yes_in = 0
     depth_no_in = 0
     
     # Calculate price ranges
-    price_low_yes = midpoint - s_max
+    price_low_yes = midpoint - max_spread_usd
     price_high_yes = midpoint
     price_low_no = midpoint
-    price_high_no = midpoint + s_max
+    price_high_no = midpoint + max_spread_usd
     
     # Sum yes bids within range [mid - s_max, mid]
     if not bids_df.empty:
@@ -159,44 +162,42 @@ def calculate_market_imbalance(bids_df, asks_df, midpoint):
     return imbalance
     
 
-def calculate_attractiveness_score(gm_rewards_per_100, spread, max_spread, tick_size, midpoint, 
+def calculate_attractiveness_score(rewards_daily_rate, spread, max_spread, tick_size, midpoint, 
                                  depth_yes_in, depth_no_in, volatility=None, 
                                  in_game_multiplier=1.0, plan_two_sided=True, alpha=0.1):
     """Calculate attractiveness score based on market conditions and strategy"""
-    EPS = 1e-6
-    
-    s_max = max_spread / 100.0  # convert cents to price units
+    max_spread_usd = round((max_spread / 100), 2)
     vol = volatility if volatility is not None else 0.0
     
     # Skip non-viable markets
-    if s_max <= tick_size or spread > s_max:
+    if max_spread_usd <= tick_size or spread > max_spread_usd:
         return 0.0
     if midpoint < 0.10 or midpoint > 0.90:
         return 0.0
     
     # 1) How much scoring boost can you capture if you quote inside incentive spread?
-    w_target = max(tick_size, min(s_max - tick_size, spread / 2))
-    boost = ((s_max - w_target) / s_max) ** 2
+    w_target = max(tick_size, min(max_spread_usd - tick_size, spread / 2))
+    boost = ((max_spread_usd - w_target) / max_spread_usd) ** 2
     
     # 2) Two-sided factor (penalty if one-sided while mid in [0.10, 0.90])
     two_sided_req = (midpoint <= 0.10 or midpoint >= 0.90)
     two_side_multiplier = 1.0 if (plan_two_sided or two_sided_req) else (1/3.0)
     
     # 3) Competition inside the reward zone
-    D = max(EPS, depth_yes_in + depth_no_in)
-    marginal_share_proxy = 1.0 / D
+    sample_investment = 100
+    D = max(sample_investment, depth_yes_in + depth_no_in)
+    competition_factor = sample_investment / D
     
     # 4) Risk/friction penalty
     risk_penalty = alpha * vol
     
     # Final attractiveness score
     attractiveness_score = (
-        gm_rewards_per_100 * in_game_multiplier * boost * two_side_multiplier * marginal_share_proxy
+        rewards_daily_rate * in_game_multiplier * boost * two_side_multiplier * competition_factor
     ) / (1.0 + risk_penalty)
 
     # Scale up for visibility
-    attractiveness_score = attractiveness_score * 10**4
-    
+    attractiveness_score = attractiveness_score * 10**3    
     return attractiveness_score
 
 def process_market_row(row, client):    
@@ -204,6 +205,8 @@ def process_market_row(row, client):
     ret['question'] = row['question']
     ret['neg_risk'] = row['neg_risk']
 
+    assert len(row['tokens']) == 2, f"Expected 2 tokens for market {row['question']}, got {len(row['tokens'])}"
+    
     ret['answer1'] = row['tokens'][0]['outcome']
     ret['answer2'] = row['tokens'][1]['outcome']
 
@@ -228,49 +231,21 @@ def process_market_row(row, client):
     try:
         bids = pd.DataFrame(book.bids).astype(float)
     except Exception as e:
-        Logan.error(
-            f"Error processing bids for token {token1}",
-            namespace="data_updater.find_markets",
-            exception=e
-        )
+        raise ValueError(f"Error processing bids for token {token1}")
 
     try:
         asks = pd.DataFrame(book.asks).astype(float)
     except Exception as e:
-        Logan.error(
-            f"Error processing asks for token {token1}",
-            namespace="data_updater.find_markets",
-            exception=e
-        )
+        raise ValueError(f"Error processing asks for token {token1}")
 
-
-    try:
-        ret['best_bid'] = bids.iloc[-1]['price'] if not bids.empty else 0
-    except Exception as e:
-        Logan.error(
-            f"Error getting best bid for token {token1}",
-            namespace="data_updater.find_markets",
-            exception=e
-        )
-        ret['best_bid'] = 0
-
-    try:
-        ret['best_ask'] = asks.iloc[-1]['price'] if not asks.empty else 1
-    except Exception as e:
-        Logan.error(
-            f"Error getting best ask for token {token1}",
-            namespace="data_updater.find_markets",
-            exception=e
-        )
-        ret['best_ask'] = 1
-
+    ret['best_bid'] = bids.iloc[-1]['price'] if not bids.empty else 0
+    ret['best_ask'] = asks.iloc[-1]['price'] if not asks.empty else 1
     ret['midpoint'] = (ret['best_bid'] + ret['best_ask']) / 2
     
     TICK_SIZE = row['minimum_tick_size']
     ret['tick_size'] = TICK_SIZE
 
     bid_from, bid_to, ask_from, ask_to = get_bid_ask_range(ret, TICK_SIZE)
-    v = round((ret['max_spread'] / 100), 2)
 
     bids_df = pd.DataFrame()
     bids_df['price'] = generate_numbers(bid_from, bid_to, TICK_SIZE)
@@ -302,7 +277,7 @@ def process_market_row(row, client):
     ret_bid = pd.DataFrame()
 
     try:
-        ret_bid = add_formula_params(bids_df, ret['midpoint'], v, rate)
+        ret_bid = calculate_reward_per_100(bids_df, ret['midpoint'], ret['max_spread'], rate)
         best_bid_reward = round(ret_bid['reward_per_100'].max(), 2)
     except Exception as e:
         Logan.error(
@@ -315,7 +290,7 @@ def process_market_row(row, client):
     ret_ask = pd.DataFrame()
 
     try:
-        ret_ask = add_formula_params(asks_df, ret['midpoint'], v, rate)
+        ret_ask = calculate_reward_per_100(asks_df, ret['midpoint'], ret['max_spread'], rate)
         best_ask_reward = round(ret_ask['reward_per_100'].max(), 2)
     except Exception as e:
         Logan.error(
@@ -329,16 +304,16 @@ def process_market_row(row, client):
 
     ret['sm_reward_per_100'] = round((best_bid_reward + best_ask_reward) / 2, 2)
     ret['gm_reward_per_100'] = round((best_bid_reward * best_ask_reward) ** 0.5, 2)
-
+    
     # Calculate market depth within reward zone
-    depth_yes_in, depth_no_in = calculate_market_depth(bids, asks, ret['midpoint'], v)
+    depth_yes_in, depth_no_in = calculate_market_depth(bids, asks, ret['midpoint'], ret['max_spread'])
     ret['depth_yes_in'] = depth_yes_in
     ret['depth_no_in'] = depth_no_in
 
     # Calculate attractiveness score
     ret['spread'] = abs(ret['best_ask'] - ret['best_bid'])
     ret['attractiveness_score'] = calculate_attractiveness_score(
-        gm_rewards_per_100=ret['gm_reward_per_100'],
+        rewards_daily_rate=ret['rewards_daily_rate'],
         spread=ret['spread'],
         max_spread=ret['max_spread'],
         tick_size=TICK_SIZE,

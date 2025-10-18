@@ -11,6 +11,7 @@ from poly_data.data_utils import update_markets, update_positions, update_orders
 from poly_data.websocket_handlers import connect_market_websocket, connect_user_websocket
 import poly_data.global_state as global_state
 from poly_data.data_processing import remove_from_performing
+from poly_data.strategy_factory import StrategyFactory, StrategyType
 from dotenv import load_dotenv
 from configuration import MCNF
 
@@ -81,12 +82,23 @@ async def main():
     parser = argparse.ArgumentParser(description="Polymarket Market Making Bot")
     parser.add_argument("--env", default=".env", help="Path to environment file (default: .env)")
     parser.add_argument("--nologan", action="store_true", default=False, help="Disable Logan server and log to console")
+    parser.add_argument(
+        "--strategy", 
+        type=StrategyType,
+        default=StrategyType.ANS,
+        choices=list(StrategyType), 
+        help=f"Market making strategy to use (default: {StrategyType.ANS})"
+    )
     args = parser.parse_args()
     
     load_dotenv(dotenv_path=args.env)
 
     if not args.nologan:
         Logan.init()
+
+    # Initialize market strategy based on command-line argument
+    StrategyFactory.init(args.strategy)
+    Logan.info(f"Initialized market strategy: {args.strategy}", namespace="init")
 
     # Initialize client
     global_state.client = PolymarketClient(env_path=args.env)

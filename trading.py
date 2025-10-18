@@ -10,7 +10,7 @@ import poly_data.CONSTANTS as CONSTANTS
 from configuration import TCNF
 
 # Import utility functions for trading
-from poly_data.market_strategy import MarketStrategy
+from poly_data.strategy_factory import StrategyFactory
 from poly_data.trading_utils import get_best_bid_ask_deets, round_down, round_up
 from poly_data.data_utils import get_position, get_order, get_readable_from_condition_id, get_total_balance
 from poly_data.market_selection import get_enhanced_market_row
@@ -239,7 +239,7 @@ async def perform_trade(market):
                 position = round_down(position, 2)
                
                 # Calculate optimal bid and ask prices based on market conditions
-                bid_price, ask_price = MarketStrategy.get_order_prices(
+                bid_price, ask_price = StrategyFactory.get().get_order_prices(
                     best_bid, best_ask, avgPrice, row, token, row['tick_size'], force_sell=sell_only
                 )
 
@@ -254,7 +254,7 @@ async def perform_trade(market):
                 other_position = get_position(other_token)['size']
                 
                 # Calculate how much to buy or sell based on our position
-                buy_amount, sell_amount = MarketStrategy.get_buy_sell_amount(position, row, force_sell=sell_only)
+                buy_amount, sell_amount = StrategyFactory.get().get_buy_sell_amount(position, row, force_sell=sell_only)
                 
                 # Get max_size for logging (same logic as in get_buy_sell_amount)
                 trade_size = row.get('trade_size', position)
@@ -270,9 +270,6 @@ async def perform_trade(market):
                     'token_name': detail['name'],
                     'row': row
                 }
-            
-                #       f"Trade Size: {trade_size}, Max Size: {max_size}, "
-                #       f"buy_amount: {buy_amount}, sell_amount: {sell_amount}")
 
                 # File to store risk management information for this market
                 fname = 'positions/' + str(market) + '.json'
@@ -430,6 +427,4 @@ async def perform_trade(market):
         except Exception as ex:
             Logan.error(f"Critical error in perform_trade function for market {market} ({row.get('question', 'unknown question') if 'row' in locals() else 'unknown question'}): {ex}", namespace="trading", exception=ex)
 
-        # Clean up memory and introduce a small delay
         gc.collect()
-        await asyncio.sleep(2)

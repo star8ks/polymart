@@ -3,9 +3,10 @@ from math import log
 from logan import Logan
 from configuration import TCNF
 from poly_data.data_utils import get_position
+from poly_data.market_strategy import MarketStrategy
 
 
-class MarketStrategy:
+class AnSMarketStrategy(MarketStrategy):
     @classmethod
     def get_buy_sell_amount(cls, position, row, force_sell=False) -> tuple[float, float]:
         buy_amount = 0
@@ -55,22 +56,8 @@ class MarketStrategy:
         bid_price = reservation_price - optimal_spread/2
         ask_price = reservation_price + optimal_spread/2
 
-        # Safety guards
-        if avgPrice > 0.9 or avgPrice < 0.1 or bid_price >= ask_price:
-            bid_price = best_bid
-            ask_price = best_ask
+        bid_price, ask_price = cls.apply_safety_guards(bid_price, ask_price, avgPrice, tick, best_bid, best_ask, force_sell)
         
-        # I'm a pussy
-        if bid_price >= avgPrice: 
-            bid_price = avgPrice - tick
-        if ask_price <= avgPrice:
-            ask_price = avgPrice + tick
-        
-        if force_sell and ask_price > best_ask: 
-            ask_price = best_ask
-        if force_sell and bid_price >= best_bid: 
-            bid_price = best_bid - tick
-
         return bid_price, ask_price
 
     @classmethod
@@ -102,7 +89,4 @@ class MarketStrategy:
         left = risk_aversion * (volatility**2) * time_to_horizon
         right = (2/risk_aversion) * log(1 + (risk_aversion / arrival_sensitivity))
         return factor * (left + right)
-            
 
-        
-        

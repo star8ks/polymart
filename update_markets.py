@@ -105,7 +105,6 @@ def fetch_and_process_data():
         )
 
 if __name__ == "__main__":    
-    # Logan.init()
     while True:
         try:
             fetch_and_process_data()

@@ -77,7 +77,6 @@ def remove_from_performing(col, id):
         global_state.performing_timestamps[col].pop(id, None)
 
 def process_user_data(rows):
-    Logan.debug(f"Processing user data, rows: {rows}", namespace="poly_data.data_processing")
     if isinstance(rows, dict):
         rows = [rows]
     elif not isinstance(rows, list):

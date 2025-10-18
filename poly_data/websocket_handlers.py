@@ -99,7 +99,6 @@ async def connect_user_websocket():
                 # Process incoming user data indefinitely
                 while True:
                     message = await websocket.recv()
-                    Logan.debug(f"Received user data, message: {message}", namespace="websocket_handlers")
                     json_data = json.loads(message)
                     # Process trade and order updates
                     process_user_data(json_data)
