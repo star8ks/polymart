@@ -3,6 +3,7 @@ from sortedcontainers import SortedDict
 import poly_data.global_state as global_state
 import poly_data.CONSTANTS as CONSTANTS
 
+from poly_data.orders_in_flight import clear_order_in_flight
 from trading import perform_trade
 import time 
 import asyncio
@@ -129,23 +130,20 @@ def process_user_data(rows):
                     namespace="poly_data.data_processing"
                 ) 
 
-
-                if row['status'] == 'CONFIRMED' or row['status'] == 'FAILED' :
-                    if row['status'] == 'FAILED':
-                        Logan.error(
-                            f"Trade failed for {token}, decreasing",
-                            namespace="poly_data.data_processing"
-                        )
-                        asyncio.create_task(asyncio.sleep(2))
-                        update_positions()
-                    else:
-                        remove_from_performing(col, row['id'])
-                        Logan.info(
-                            f"Confirmed. Performing is {len(global_state.performing[col])}",
-                            namespace="poly_data.data_processing"
-                        )
-                        asyncio.create_task(perform_trade(market))
-
+                if row['status'] == 'FAILED':
+                    Logan.error(
+                        f"Trade failed for {token}, decreasing",
+                        namespace="poly_data.data_processing"
+                    )
+                    asyncio.create_task(asyncio.sleep(2))
+                    update_positions()
+                elif row['status'] == 'CONFIRMED':
+                    remove_from_performing(col, row['id'])
+                    Logan.info(
+                        f"Confirmed. Performing is {len(global_state.performing[col])}",
+                        namespace="poly_data.data_processing"
+                    )
+                    asyncio.create_task(perform_trade(market))
                 elif row['status'] == 'MATCHED':
                     add_to_performing(col, row['id'])
 
@@ -163,20 +161,23 @@ def process_user_data(rows):
                     remove_from_performing(col, row['id'])
 
             elif row['event_type'] == 'order':
-                Logan.debug(
-                    f"ORDER EVENT FOR: {row['market']}, STATUS: {row['status']}, TYPE: {row['type']}, SIDE: {side}, ORIGINAL SIZE: {row['original_size']}, SIZE MATCHED: {row['size_matched']}",
-                    namespace="poly_data.data_processing"
-                )
                 Logan.info(
                     f"ORDER EVENT FOR: {row['market']}, STATUS: {row['status']}, TYPE: {row['type']}, SIDE: {side}, ORIGINAL SIZE: {row['original_size']}, SIZE MATCHED: {row['size_matched']}",
                     namespace="poly_data.data_processing"
                 )
                 
-                set_order(token, side, float(row['original_size']) - float(row['size_matched']), row['price'])
-                asyncio.create_task(perform_trade(market))
+                try: 
+                    order_size = global_state.orders[token][side]['size'] # size of existing orders
+                except Exception as e:
+                    order_size = 0
 
-        else:
-            Logan.warn(
-                f"User data received for {market} but its not in reverse tokens",
-                namespace="poly_data.data_processing"
-            )
+                if row['type'] == 'PLACEMENT':
+                    order_size += float(row['original_size'])
+                elif row['type'] == 'UPDATE': 
+                    order_size -= float(row['size_matched'])
+                elif row['type'] == 'CANCELLATION':
+                    order_size -= float(row['original_size'])
+
+                set_order(token, side, order_size, row['price'])
+                clear_order_in_flight(row['id'])
+                asyncio.create_task(perform_trade(market))

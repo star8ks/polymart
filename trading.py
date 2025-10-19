@@ -10,6 +10,7 @@ import poly_data.CONSTANTS as CONSTANTS
 from configuration import TCNF
 
 # Import utility functions for trading
+from poly_data.orders_in_flight import get_orders_in_flight, set_order_in_flight
 from poly_data.strategy_factory import StrategyFactory
 from poly_data.trading_utils import get_best_bid_ask_deets, round_down, round_up
 from poly_data.data_utils import get_position, get_order, get_readable_from_condition_id, get_total_balance
@@ -36,7 +37,7 @@ def send_buy_order(order):
     # Only cancel existing orders if we need to make significant changes
     existing_buy_size = order['orders']['buy']['size']
     existing_buy_price = order['orders']['buy']['price']
-    
+
     # Cancel orders if price changed significantly or size needs major adjustment
     price_diff = abs(existing_buy_price - order['price']) if existing_buy_price > 0 else float('inf')
     size_diff = abs(existing_buy_size - order['size']) if existing_buy_size > 0 else float('inf')
@@ -54,13 +55,15 @@ def send_buy_order(order):
         return  # Don't place new order if existing one is fine
 
     if order['price'] >= TCNF.MIN_PRICE_LIMIT and order['price'] < TCNF.MAX_PRICE_LIMIT:
-        client.create_order(
+        resp = client.create_order(
             order['token'], 
             'BUY', 
             order['price'], 
             order['size'], 
             True if order['neg_risk'] == 'TRUE' else False
         )
+        order['side'] = 'buy'
+        handle_create_order_response(resp, order)
     else:
         Logan.warn(f"Not creating buy order because its outside acceptable price range ({TCNF.MIN_PRICE_LIMIT}-{TCNF.MAX_PRICE_LIMIT})", namespace="trading")
 
@@ -99,13 +102,22 @@ def send_sell_order(order):
         return  # Don't place new order if existing one is fine
 
     Logan.info(f'Creating new sell order for {order["size"]} at {order["price"]}', namespace="trading")
-    client.create_order(
+    resp = client.create_order(
         order['token'], 
         'SELL', 
         order['price'], 
         order['size'], 
         True if order['neg_risk'] == 'TRUE' else False
     )
+    order['side'] = 'sell'
+    handle_create_order_response(resp, order)
+
+def handle_create_order_response(resp, order):
+    if 'success' in resp and resp['success']: 
+        set_order_in_flight(order['market'], resp['orderID'], order['side'], order['price'], order['size'])
+    else: 
+        Logan.error(f"Error creating order for token: {order['token']}", namespace="trading")
+
 
 # Dictionary to store locks for each market to prevent concurrent trading on the same market
 market_locks = {}
@@ -123,6 +135,11 @@ async def perform_trade(market):
     Args:
         market (str): The market ID to trade on
     """
+    # Don't act on the market if there is an order in flight for the market
+    orders_in_flight = get_orders_in_flight(market)
+    if len(orders_in_flight) > 0:
+        return
+    
     # Create a lock for this market if it doesn't exist
     if market not in market_locks:
         market_locks[market] = asyncio.Lock()
@@ -240,6 +257,7 @@ async def perform_trade(market):
 
                 # Prepare order object with all necessary information
                 order = {
+                    "market": market,
                     "token": token,
                     "mid_price": mid_price,
                     "neg_risk": row['neg_risk'],

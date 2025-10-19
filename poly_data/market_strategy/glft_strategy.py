@@ -26,9 +26,12 @@ class GLFTMarketStrategy(MarketStrategy):
         competition = cls.calculate_normalized_competition_of_market(row)
         trade_feq = cls.calculate_normalized_trade_feq_of_market(row)
 
-        skew = (reward_rate * TCNF.REWARD_SKEW_FACTOR) / competition * math.sqrt(trade_feq)
-        skew = skew / 100 # convert to USD
-        skew = min(0.05, skew)
+        if competition == 0 or trade_feq == 0:
+            skew = 0
+        else:
+            skew = (reward_rate * TCNF.REWARD_SKEW_FACTOR) / competition * math.sqrt(trade_feq)
+            skew = skew / 100  # convert to USD
+            skew = min(0.05, skew)
         
         # Only apply reward skew if we end up inside the max reward spread
         s_half = row['max_spread'] / 100 / 2
