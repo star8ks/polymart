@@ -163,6 +163,10 @@ def process_user_data(rows):
                     remove_from_performing(col, row['id'])
 
             elif row['event_type'] == 'order':
+                Logan.debug(
+                    f"ORDER EVENT FOR: {row['market']}, STATUS: {row['status']}, TYPE: {row['type']}, SIDE: {side}, ORIGINAL SIZE: {row['original_size']}, SIZE MATCHED: {row['size_matched']}",
+                    namespace="poly_data.data_processing"
+                )
                 Logan.info(
                     f"ORDER EVENT FOR: {row['market']}, STATUS: {row['status']}, TYPE: {row['type']}, SIDE: {side}, ORIGINAL SIZE: {row['original_size']}, SIZE MATCHED: {row['size_matched']}",
                     namespace="poly_data.data_processing"

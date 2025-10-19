@@ -27,8 +27,8 @@ class TradingConfig:
     # Market selection and investment parameters
     INVESTMENT_CEILING = 2000
     MAX_POSITION_MULT = 3
-    BUDGET_MULT = 2.0
-    MARKET_COUNT = 25
+    BUDGET_MULT = 1.5
+    MARKET_COUNT = 20
     
     # Risk management thresholds
     MAX_VOLATILITY_SUM = 16.0
@@ -49,12 +49,12 @@ class TradingConfig:
     MIN_UNIQUE_TRADERS = 5  # Minimum number of unique traders
 
     # Market strategy parameters
-    RISK_AVERSION = 0.5
+    RISK_AVERSION = 0.4
     TIME_TO_HORIZON_HOURS = 24
     ARRIVAL_RATE_BIN_SIZE = 0.01
     MIN_ARRIVAL_RATE_SENSITIVITY = 1.0
     MAX_ARRIVAL_RATE_SENSITIVITY = 80.0
-    REWARD_SKEW_FACTOR = 0.5
+    REWARD_SKEW_FACTOR = 0.05
 
     
 

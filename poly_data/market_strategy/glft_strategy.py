@@ -1,3 +1,4 @@
+import math
 from logan import Logan
 from configuration import TCNF
 from poly_data.global_state import get_active_markets
@@ -17,23 +18,33 @@ class GLFTMarketStrategy(MarketStrategy):
 
     @classmethod
     def get_order_prices(cls, best_bid, best_ask, avgPrice, row, token, tick, force_sell=False) -> tuple[float, float]:
+        if avgPrice == 0 or avgPrice is None:
+            avgPrice = (best_bid + best_ask) / 2
+        
         bid_price, ask_price = AnSMarketStrategy.get_order_prices(best_bid, best_ask, avgPrice, row, token, tick, force_sell)
-        
-        s_half = row['max_spread'] / 100 / 2
-        inside_max_reward_spread = abs(avgPrice - bid_price) < s_half and abs(avgPrice - ask_price) < s_half
-        
-        if inside_max_reward_spread:
-            reward_rate = row['rewards_daily_rate']
-            competition = cls.calculate_normalized_competition_of_market(row)
-            trade_feq = cls.calculate_normalized_trade_feq_of_market(row)
 
-            skew = (reward_rate * TCNF.REWARD_SKEW_FACTOR) / (competition * trade_feq)
-            Logan.debug(f"Skew: {skew}, reward_rate: {reward_rate}, competition: {competition}, trade_feq: {trade_feq}", namespace="poly_data.market_strategy.glft_strategy")
-            # bid_price, ask_price = bid_price + skew, ask_price - skew
+        reward_rate = row['rewards_daily_rate']
+        competition = cls.calculate_normalized_competition_of_market(row)
+        trade_feq = cls.calculate_normalized_trade_feq_of_market(row)
+
+        skew = (reward_rate * TCNF.REWARD_SKEW_FACTOR) / competition * math.sqrt(trade_feq)
+        skew = skew / 100 # convert to USD
+        skew = min(0.05, skew)
+        
+        # Only apply reward skew if we end up inside the max reward spread
+        s_half = row['max_spread'] / 100 / 2
+        new_bid_price = bid_price + skew
+        new_ask_price = ask_price - skew
+        inside_max_reward_spread = abs(avgPrice - new_bid_price) < s_half and abs(avgPrice - new_ask_price) < s_half
+        if inside_max_reward_spread:
+            Logan.debug(f"Inside max reward spread, applying skew: {skew}", namespace="poly_data.market_strategy.glft_strategy")
+            bid_price, ask_price = new_bid_price, new_ask_price
         
         bid_price, ask_price = cls.apply_safety_guards(bid_price, ask_price, avgPrice, tick, best_bid, best_ask, force_sell)
+        Logan.debug(f"for token: {token}, GLFT ch3: Bid price: {bid_price}, Ask price: {ask_price}, avgPrice: {avgPrice}, tick: {tick}, best_bid: {best_bid}, best_ask: {best_ask}, force_sell: {force_sell}", namespace="poly_data.market_strategy.glft_strategy")
         return bid_price, ask_price
 
+    @classmethod
     def calculate_normalized_competition_of_market(cls, row):
         depth = row['depth_yes_in'] + row['depth_no_in']
 
@@ -44,6 +55,7 @@ class GLFTMarketStrategy(MarketStrategy):
 
         return depth / avg_depth
     
+    @classmethod
     def calculate_normalized_trade_feq_of_market(cls, row):
         trade_feq = row['avg_trades_per_day']
 

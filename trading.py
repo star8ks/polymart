@@ -51,19 +51,12 @@ def send_buy_order(order):
         Logan.info(f"Cancelling buy orders - price diff: {price_diff:.4f}, size diff: {size_diff:.1f}", namespace="trading")
         client.cancel_all_asset(order['token'])
     elif not should_cancel:
-        Logan.info(f"Keeping existing buy orders - minor changes: price diff: {price_diff:.4f}, size diff: {size_diff:.1f}", namespace="trading")
         return  # Don't place new order if existing one is fine
 
     # Calculate minimum acceptable price based on market spread
     incentive_start = order['mid_price'] - order['max_spread']/100
 
-    trade = True
-
-    # Don't place orders that are below incentive threshold
-    if order['price'] < incentive_start:
-        trade = False
-
-    if trade:
+    if order['price'] > incentive_start:
         # Only place orders with prices between 0.1 and 0.9 to avoid extreme positions
         if order['price'] >= TCNF.MIN_PRICE_LIMIT and order['price'] < TCNF.MAX_PRICE_LIMIT:
             client.create_order(
@@ -76,7 +69,7 @@ def send_buy_order(order):
         else:
             Logan.warn("Not creating buy order because its outside acceptable price range (0.1-0.9)", namespace="trading")
     else:
-        Logan.info(f'Not creating new order because order price of {order["price"]} is less than incentive start price of {incentive_start}. Mid price is {order["mid_price"]}', namespace="trading")
+        Logan.warn(f'Not creating new order because order price of {order["price"]} is less than incentive start price of {incentive_start}. Mid price is {order["mid_price"]}', namespace="trading")
 
 
 def send_sell_order(order):
@@ -110,7 +103,6 @@ def send_sell_order(order):
         Logan.info(f"Cancelling sell orders - price diff: {price_diff:.4f}, size diff: {size_diff:.1f}", namespace="trading")
         client.cancel_all_asset(order['token'])
     elif not should_cancel:
-        Logan.info(f"Keeping existing sell orders - minor changes: price diff: {price_diff:.4f}, size diff: {size_diff:.1f}", namespace="trading")
         return  # Don't place new order if existing one is fine
 
     Logan.info(f'Creating new sell order for {order["size"]} at {order["price"]}', namespace="trading")
@@ -245,6 +237,7 @@ async def perform_trade(market):
 
                 bid_price = round(bid_price, round_length)
                 ask_price = round(ask_price, round_length)
+                Logan.debug(f"trading just got prices and rounded: {bid_price}, {ask_price}", namespace="trading")
 
                 # Calculate mid price for reference
                 mid_price = (top_bid + top_ask) / 2
@@ -350,9 +343,7 @@ async def perform_trade(market):
                     sheet_value = round(sheet_value, round_length)
                     order['size'] = buy_amount
                     order['price'] = bid_price
-
-                    # Check if price is far from reference
-                    price_change = abs(order['price'] - sheet_value)
+                    Logan.debug(f"trading inside buy order logic: buy amount: {buy_amount}, bid price: {bid_price}", namespace="trading")
 
                     send_buy = True
 
@@ -385,20 +376,24 @@ async def perform_trade(market):
                             if orders['buy']['size'] > TCNF.MIN_MERGE_SIZE:
                                 client.cancel_all_asset(order['token'])
                             continue
+
+                        send_buy_order(order)
                     
-                        # Place new buy order if any of these conditions are met:
-                        # 1. We can get a better price than current order
-                        if best_bid > orders['buy']['price']:
-                            Logan.info(f"Sending Buy Order for {token} because better price. ", namespace="trading")
-                            send_buy_order(order)
-                        # 2. Current position + orders is not enough to reach max_size
-                        elif position + orders['buy']['size'] < max_size:
-                            Logan.info(f"Sending Buy Order for {token} because not enough position + size", namespace="trading")
-                            send_buy_order(order)
-                        # 3. Our current order is too large and needs to be resized
-                        elif orders['buy']['size'] > order['size'] * 1.01:
-                            Logan.info(f"Resending buy orders because open orders are too large", namespace="trading")
-                            send_buy_order(order)
+                        # TODO: This is bullshit right? 
+                        # # Place new buy order if any of these conditions are met:
+                        # # 1. We can get a better price than current order
+                        # if best_bid > orders['buy']['price']:
+                        #     Logan.info(f"Sending Buy Order for {token} because better price. ", namespace="trading")
+                        #     Logan.debug(f"best bid: {best_bid}, orders['buy']['price']: {orders['buy']['price']}", namespace="trading")
+                        #     send_buy_order(order)
+                        # # 2. Current position + orders is not enough to reach max_size
+                        # elif position + orders['buy']['size'] < max_size:
+                        #     Logan.info(f"Sending Buy Order for {token} because not enough position + size", namespace="trading")
+                        #     send_buy_order(order)
+                        # # 3. Our current order is too large and needs to be resized
+                        # elif orders['buy']['size'] > order['size'] * 1.01:
+                        #     Logan.info(f"Resending buy orders because open orders are too large", namespace="trading")
+                        #     send_buy_order(order)
                         
                 # ------- TAKE PROFIT / SELL ORDER MANAGEMENT -------            
                 elif sell_amount > 0:
