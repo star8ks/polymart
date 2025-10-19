@@ -61,7 +61,7 @@ def update_periodically():
             remove_from_pending()
             
             # Update positions and orders every cycle
-            update_positions(avgOnly=True)  # Only update average price, not position size
+            update_positions()
             update_orders()
 
             # Update market data every 6th cycle (30 seconds)

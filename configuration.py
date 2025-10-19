@@ -31,7 +31,7 @@ class TradingConfig:
     MARKET_COUNT = 20
     
     # Risk management thresholds
-    MAX_VOLATILITY_SUM = 16.0
+    MAX_VOLATILITY_SUM = 14.0
     MIN_ATTRACTIVENESS_SCORE = 0.0
     MARKET_IMBALANCE_CALC_PCT = 0.3 # percentage of midpoint to include in imbalance calculation
     MARKET_IMBALANCE_CALC_LEVELS = 5 # number of price levels to include in imbalance calculation
