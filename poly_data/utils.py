@@ -4,12 +4,6 @@ import pandas as pd
 import os
 from logan import Logan
 
-def pretty_print(txt, dic):
-    Logan.debug(
-        f"{txt}: {json.dumps(dic, indent=4)}",
-        namespace="poly_data.utils"
-    )
-
 def get_sheet_df(read_only=None):
     """
     Get sheet data with optional read-only mode

@@ -17,11 +17,10 @@ class GLFTMarketStrategy(MarketStrategy):
         return AnSMarketStrategy.get_buy_sell_amount(position, row, force_sell)
 
     @classmethod
-    def get_order_prices(cls, best_bid, best_ask, avgPrice, row, token, tick, force_sell=False) -> tuple[float, float]:
-        if avgPrice == 0 or avgPrice is None:
-            avgPrice = (best_bid + best_ask) / 2
+    def get_order_prices(cls, best_bid, best_ask, mid_price, row, token, tick, force_sell=False) -> tuple[float, float]:
+        assert mid_price != 0 and mid_price is not None, "Mid price is 0 or None"
         
-        bid_price, ask_price = AnSMarketStrategy.get_order_prices(best_bid, best_ask, avgPrice, row, token, tick, force_sell)
+        bid_price, ask_price = AnSMarketStrategy.get_order_prices(best_bid, best_ask, mid_price, row, token, tick, force_sell)
 
         reward_rate = row['rewards_daily_rate']
         competition = cls.calculate_normalized_competition_of_market(row)
@@ -35,13 +34,11 @@ class GLFTMarketStrategy(MarketStrategy):
         s_half = row['max_spread'] / 100 / 2
         new_bid_price = bid_price + skew
         new_ask_price = ask_price - skew
-        inside_max_reward_spread = abs(avgPrice - new_bid_price) < s_half and abs(avgPrice - new_ask_price) < s_half
+        inside_max_reward_spread = abs(mid_price - new_bid_price) < s_half and abs(mid_price - new_ask_price) < s_half
         if inside_max_reward_spread:
-            Logan.debug(f"Inside max reward spread, applying skew: {skew}", namespace="poly_data.market_strategy.glft_strategy")
             bid_price, ask_price = new_bid_price, new_ask_price
         
-        bid_price, ask_price = cls.apply_safety_guards(bid_price, ask_price, avgPrice, tick, best_bid, best_ask, force_sell)
-        Logan.debug(f"for token: {token}, GLFT ch3: Bid price: {bid_price}, Ask price: {ask_price}, avgPrice: {avgPrice}, tick: {tick}, best_bid: {best_bid}, best_ask: {best_ask}, force_sell: {force_sell}", namespace="poly_data.market_strategy.glft_strategy")
+        bid_price, ask_price = cls.apply_safety_guards(bid_price, ask_price, mid_price, tick, best_bid, best_ask, force_sell)
         return bid_price, ask_price
 
     @classmethod

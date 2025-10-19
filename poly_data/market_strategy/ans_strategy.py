@@ -43,20 +43,19 @@ class AnSMarketStrategy(MarketStrategy):
         return buy_amount, sell_amount
 
     @classmethod
-    def get_order_prices(cls, best_bid, best_ask, avgPrice, row, token, tick, force_sell=False) -> tuple[float, float]:
+    def get_order_prices(cls, best_bid, best_ask, mid_price, row, token, tick, force_sell=False) -> tuple[float, float]:
         # We don't have valid data to calculate the prices
         if row['volatility_sum'] == 0 or row['order_arrival_rate_sensitivity'] <= 1:
             return best_bid, best_ask
 
-        if avgPrice == 0 or avgPrice is None:
-            avgPrice = (best_bid + best_ask) / 2
+        assert mid_price != 0 and mid_price is not None, "Mid price is 0 or None"
 
         reservation_price = cls.calculate_reservation_price(best_bid, best_ask, row, token)
         optimal_spread = cls.calculate_optimal_spread(row)
         bid_price = reservation_price - optimal_spread/2
         ask_price = reservation_price + optimal_spread/2
 
-        bid_price, ask_price = cls.apply_safety_guards(bid_price, ask_price, avgPrice, tick, best_bid, best_ask, force_sell)
+        bid_price, ask_price = cls.apply_safety_guards(bid_price, ask_price, mid_price, tick, best_bid, best_ask, force_sell)
         
         return bid_price, ask_price
 

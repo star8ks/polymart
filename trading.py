@@ -53,23 +53,16 @@ def send_buy_order(order):
     elif not should_cancel:
         return  # Don't place new order if existing one is fine
 
-    # Calculate minimum acceptable price based on market spread
-    incentive_start = order['mid_price'] - order['max_spread']/100
-
-    if order['price'] > incentive_start:
-        # Only place orders with prices between 0.1 and 0.9 to avoid extreme positions
-        if order['price'] >= TCNF.MIN_PRICE_LIMIT and order['price'] < TCNF.MAX_PRICE_LIMIT:
-            client.create_order(
-                order['token'], 
-                'BUY', 
-                order['price'], 
-                order['size'], 
-                True if order['neg_risk'] == 'TRUE' else False
-            )
-        else:
-            Logan.warn("Not creating buy order because its outside acceptable price range (0.1-0.9)", namespace="trading")
+    if order['price'] >= TCNF.MIN_PRICE_LIMIT and order['price'] < TCNF.MAX_PRICE_LIMIT:
+        client.create_order(
+            order['token'], 
+            'BUY', 
+            order['price'], 
+            order['size'], 
+            True if order['neg_risk'] == 'TRUE' else False
+        )
     else:
-        Logan.warn(f'Not creating new order because order price of {order["price"]} is less than incentive start price of {incentive_start}. Mid price is {order["mid_price"]}', namespace="trading")
+        Logan.warn(f"Not creating buy order because its outside acceptable price range ({TCNF.MIN_PRICE_LIMIT}-{TCNF.MAX_PRICE_LIMIT})", namespace="trading")
 
 
 def send_sell_order(order):
@@ -226,25 +219,17 @@ async def perform_trade(market):
                 # Get our current position and average price
                 pos = get_position(token)
                 position = pos['size']
-                avgPrice = pos['avgPrice']
-                
                 position = round_down(position, 2)
-               
+
+                avgPrice = pos['avgPrice']
+                mid_price = (top_bid + top_ask) / 2
+                
                 # Calculate optimal bid and ask prices based on market conditions
                 bid_price, ask_price = StrategyFactory.get().get_order_prices(
-                    best_bid, best_ask, avgPrice, row, token, row['tick_size'], force_sell=sell_only
+                    best_bid, best_ask, mid_price, row, token, row['tick_size'], force_sell=sell_only
                 )
-
                 bid_price = round(bid_price, round_length)
                 ask_price = round(ask_price, round_length)
-                Logan.debug(f"trading just got prices and rounded: {bid_price}, {ask_price}", namespace="trading")
-
-                # Calculate mid price for reference
-                mid_price = (top_bid + top_ask) / 2
-
-                # Get position for the opposite token to calculate total exposure
-                other_token = global_state.REVERSE_TOKENS[str(token)]
-                other_position = get_position(other_token)['size']
                 
                 # Calculate how much to buy or sell based on our position
                 buy_amount, sell_amount = StrategyFactory.get().get_buy_sell_amount(position, row, force_sell=sell_only)
@@ -290,7 +275,7 @@ async def perform_trade(market):
                     
                     # Calculate current market price and spread
                     mid_price = round_up((n_deets['best_bid'] + n_deets['best_ask']) / 2, round_length)
-                    spread = round(n_deets['best_ask'] - n_deets['best_bid'], 2) # TODO: this seems wrong? 
+                    spread = round(n_deets['best_ask'] - n_deets['best_bid'], 2)
 
                     # Calculate current profit/loss on position
                     pnl = (mid_price - avgPrice) / avgPrice * 100
@@ -343,8 +328,6 @@ async def perform_trade(market):
                     sheet_value = round(sheet_value, round_length)
                     order['size'] = buy_amount
                     order['price'] = bid_price
-                    Logan.debug(f"trading inside buy order logic: buy amount: {buy_amount}, bid price: {bid_price}", namespace="trading")
-
                     send_buy = True
 
                     # ------- RISK-OFF PERIOD CHECK -------
