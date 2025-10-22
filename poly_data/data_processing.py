@@ -4,32 +4,47 @@ import poly_data.global_state as global_state
 import poly_data.CONSTANTS as CONSTANTS
 
 from poly_data.orders_in_flight import clear_order_in_flight
+from poly_data.trading_utils import get_best_bid_ask_deets
 from trading import perform_trade
 import time 
 import asyncio
 from poly_data.data_utils import set_position, set_order, update_positions
 from logan import Logan
 
-def process_book_data(market, json_data):
-    global_state.all_data[market] = {
+def sync_order_book_data_for_reverse_token(updated_token: str):
+    reverse_token = global_state.REVERSE_TOKENS[updated_token]
+    global_state.order_book_data[reverse_token] = {
         'bids': SortedDict(),
         'asks': SortedDict()
     }
 
-    global_state.all_data[market]['bids'].update({float(entry['price']): float(entry['size']) for entry in json_data['bids']})
-    global_state.all_data[market]['asks'].update({float(entry['price']): float(entry['size']) for entry in json_data['asks']})
+    global_state.order_book_data[reverse_token]['asks'].update({1 - price: size for price, size in global_state.order_book_data[updated_token]['bids'].items()})
+    global_state.order_book_data[reverse_token]['bids'].update({1 - price: size for price, size in global_state.order_book_data[updated_token]['asks'].items()})
 
-def process_price_change(asset, side, price_level, new_size):
+def process_book_data(token: str, json_data):
+    global_state.order_book_data[token] = {
+        'bids': SortedDict(),
+        'asks': SortedDict()
+    }
+
+    global_state.order_book_data[token]['bids'].update({float(entry['price']): float(entry['size']) for entry in json_data['bids']})
+    global_state.order_book_data[token]['asks'].update({float(entry['price']): float(entry['size']) for entry in json_data['asks']})
+
+    sync_order_book_data_for_reverse_token(token)
+
+def process_price_change(token: str, side, price_level, new_size):
     if side == 'bids':
-        book = global_state.all_data[asset]['bids']
+        book = global_state.order_book_data[token]['bids']
     else:
-        book = global_state.all_data[asset]['asks']
+        book = global_state.order_book_data[token]['asks']
 
     if new_size == 0:
         if price_level in book:
             del book[price_level]
     else:
         book[price_level] = new_size
+    
+    sync_order_book_data_for_reverse_token(token)
 
 def process_data(json_datas, trade=True):
     # Check if json_datas is a dict or a list of dicts
@@ -42,19 +57,22 @@ def process_data(json_datas, trade=True):
     for json_data in json_datas:
         event_type = json_data['event_type']
         market = json_data['market']
+        # token = str(json_data['asset_id'])
 
         if event_type == 'book':
-            process_book_data(market, json_data)
+            token = str(json_data['asset_id'])
+            process_book_data(token, json_data)
 
             if trade:
                 asyncio.create_task(perform_trade(market))
                 
         elif event_type == 'price_change':
             for data in json_data['price_changes']:
+                token = str(data['asset_id'])
                 side = 'bids' if data['side'] == 'BUY' else 'asks'
                 price_level = float(data['price'])
                 new_size = float(data['size'])
-                process_price_change(market, side, price_level, new_size)
+                process_price_change(token, side, price_level, new_size)
 
                 if trade:
                     asyncio.create_task(perform_trade(market))
@@ -180,4 +198,6 @@ def process_user_data(rows):
 
                 set_order(token, side, order_size, row['price'])
                 clear_order_in_flight(row['id'])
+                
                 asyncio.create_task(perform_trade(market))
+

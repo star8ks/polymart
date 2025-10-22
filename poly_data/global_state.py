@@ -10,7 +10,7 @@ all_tokens = []
 REVERSE_TOKENS = {}  
 
 # Order book data for all markets
-all_data = {}  
+order_book_data = {}  
 
 # Market configuration data from Google Sheets
 df = None

@@ -212,27 +212,25 @@ async def perform_trade(market):
             # ------- TRADING LOGIC FOR EACH OUTCOME -------
             # Loop through both outcomes in the market (YES and NO)
             for detail in deets:
-                token = int(detail['token'])
+                token = str(detail['token'])
                 
                 # Get current orders for this token
                 orders = get_order(token)
 
                 # Get market depth and price information
-                deets = get_best_bid_ask_deets(market, detail['name'], 100)
+                deets = get_best_bid_ask_deets(token, 100)
 
                 # NOTE: This looks hacky and risky
                 #if deet has None for one these values below, call it with min size of 20
                 if deets['best_bid'] is None or deets['best_ask'] is None or deets['best_bid_size'] is None or deets['best_ask_size'] is None:
-                    deets = get_best_bid_ask_deets(market, detail['name'], 20)
+                    deets = get_best_bid_ask_deets(token, 20)
                 
                 # Extract all order book details
                 best_bid = round(deets['best_bid'], round_length) if deets['best_bid'] is not None else None
-                best_bid_size = deets['best_bid_size']
                 best_ask = round(deets['best_ask'], round_length) if deets['best_ask'] is not None else None
-                best_ask_size = deets['best_ask_size']
                 top_bid = round(deets['top_bid'], round_length) if deets['top_bid'] is not None else None
                 top_ask = round(deets['top_ask'], round_length) if deets['top_ask'] is not None else None
-                
+
                 # Get our current position and average price
                 pos = get_position(token)
                 position = pos['size']
@@ -288,17 +286,11 @@ async def perform_trade(market):
                     order['size'] = sell_amount
                     order['price'] = ask_price
 
-                    # Get fresh market data for risk assessment
-                    n_deets = get_best_bid_ask_deets(market, detail['name'], 100)
-                    
-                    # Calculate current market price and spread
-                    mid_price = round_up((n_deets['best_bid'] + n_deets['best_ask']) / 2, round_length)
-                    spread = round(n_deets['best_ask'] - n_deets['best_bid'], 2)
+                    spread = top_ask - top_bid
 
                     # Calculate current profit/loss on position
                     pnl = (mid_price - avgPrice) / avgPrice * 100
 
-                    
                     # Prepare risk details for tracking
                     risk_details = {
                         'time': str(pd.Timestamp.utcnow().tz_localize(None)),
@@ -317,7 +309,7 @@ async def perform_trade(market):
 
                         # Sell at market best bid to ensure execution
                         order['size'] = pos_to_sell
-                        order['price'] = n_deets['best_bid']
+                        order['price'] = top_bid
 
                         # Set period to avoid trading after stop-loss
                         risk_details['sleep_till'] = str(pd.Timestamp.utcnow().tz_localize(None) + 
