@@ -40,6 +40,7 @@ cd poly-maker
 2. **Install Python dependencies**:
 ```
 pip install -r requirements.txt
+pip install git+https://github.com/merijjeyn/logan.git
 ```
 
 3. **Install Node.js dependencies for the merger**:
@@ -61,7 +62,8 @@ cp .env.example .env
 Make sure your wallet has done at least one trade thru the UI so that the permissions are proper.
 
 6. **Set up Google Sheets integration**:
-   - Create a Google Service Account and download credentials to the main directory
+   - Create a Google Service Account and download json credential file as credentials.json to the main directory
+   - Enable Google Sheets API for the google cloud project at [this page](https://console.cloud.google.com/apis/library/sheets.googleapis.com)
    - Copy the [sample Google Sheet](https://docs.google.com/spreadsheets/d/1Kt6yGY7CZpB75cLJJAdWo7LSp9Oz7pjqfuVWwgtn7Ns/edit?gid=1884499063#gid=1884499063)
    - Add your Google service account to the sheet with edit permissions
    - Update `SPREADSHEET_URL` in your `.env` file
