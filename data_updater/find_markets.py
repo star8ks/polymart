@@ -100,18 +100,63 @@ def generate_numbers(start, end, TICK_SIZE):
     return numbers
 
 # TODO: This reward calculation is awful. Reevaluate it. 
+
+
+def _empty_reward_df():
+    return pd.DataFrame(columns=['price', 'size', 'reward_per_100'])
+
+
 def calculate_reward_per_100(curr_df, midpoint, max_spread, daily_reward):
+    if curr_df is None or curr_df.empty:
+        return _empty_reward_df()
+
+    curr_df = curr_df.copy()
+
+    if 'price' not in curr_df.columns:
+        return _empty_reward_df()
+
+    if 'size' not in curr_df.columns:
+        curr_df['size'] = 0.0
+
+    curr_df = curr_df.dropna(subset=['price'])
+    curr_df = curr_df[curr_df['price'] > 0]
+
+    if curr_df.empty:
+        return _empty_reward_df()
+
+    curr_df['size'] = curr_df['size'].fillna(0.0)
+
     max_spread_usd = round((max_spread / 100), 2)
+    if max_spread_usd <= 0:
+        curr_df['reward_per_100'] = 0.0
+        return curr_df
+
     curr_df['s'] = (curr_df['price'] - midpoint).abs()
     curr_df['S'] = ((max_spread_usd - curr_df['s']) / max_spread_usd) ** 2
-    # curr_df['S'] = curr_df['S'].where(curr_df['s'] <= v, 0)  # Set to 0 when s > v
-    
-    curr_df['100'] = 1/curr_df['price'] * 100
+
+    curr_df['100'] = 1 / curr_df['price'] * 100
     curr_df['size'] = curr_df['size'] + curr_df['100']
 
     curr_df['Q'] = curr_df['S'] * curr_df['size']
-    curr_df['reward_per_100'] = (curr_df['Q'] / curr_df['Q'].sum()) * daily_reward / 2 / curr_df['size'] * curr_df['100']
+    total_q = curr_df['Q'].sum()
+    if total_q <= 0 or np.isnan(total_q):
+        curr_df['reward_per_100'] = 0.0
+        return curr_df
+
+    curr_df['reward_per_100'] = (curr_df['Q'] / total_q) * daily_reward / 2 / curr_df['size'] * curr_df['100']
+    curr_df['reward_per_100'] = curr_df['reward_per_100'].fillna(0.0)
     return curr_df
+
+
+def get_best_reward_value(reward_df):
+    if reward_df is None or reward_df.empty or 'reward_per_100' not in reward_df.columns:
+        return 0.0
+
+    max_reward = reward_df['reward_per_100'].max()
+    if pd.isna(max_reward):
+        return 0.0
+
+    return float(max_reward)
 
 def calculate_market_depth(bids_df, asks_df, midpoint, max_spread):
     max_spread_usd = round((max_spread / 100), 2)
@@ -138,6 +183,18 @@ def calculate_market_depth(bids_df, asks_df, midpoint, max_spread):
     return depth_yes_in, depth_no_in
 
 def calculate_market_imbalance(bids_df, asks_df, midpoint):
+    if bids_df is None or asks_df is None:
+        return 0.0
+
+    if 'price' not in bids_df.columns or 'price' not in asks_df.columns:
+        return 0.0
+
+    bids_df = bids_df[bids_df['price'].notna()]
+    asks_df = asks_df[asks_df['price'].notna()]
+
+    if bids_df.empty and asks_df.empty:
+        return 0.0
+
     # The window to look for imbalance is the hybrid of fixed number of price levels,
     # and a fixed spread size calculated from the percentage of midpoint
     bids_sorted = bids_df[bids_df['price'] <= midpoint].sort_values('price', ascending=False)
@@ -154,11 +211,15 @@ def calculate_market_imbalance(bids_df, asks_df, midpoint):
     window_upper = min(level_window_upper, pct_window_upper)
 
     bids_in_window = bids_df[(bids_df['price'] >= window_lower) & (bids_df['price'] <= window_upper)]
-    bids_size_in_window = bids_in_window['size'].sum()
+    bids_size_in_window = bids_in_window['size'].sum() if 'size' in bids_in_window.columns else 0.0
     asks_in_window = asks_df[(asks_df['price'] >= window_lower) & (asks_df['price'] <= window_upper)]
-    asks_size_in_window = asks_in_window['size'].sum()
+    asks_size_in_window = asks_in_window['size'].sum() if 'size' in asks_in_window.columns else 0.0
 
-    imbalance = (bids_size_in_window - asks_size_in_window) / (bids_size_in_window + asks_size_in_window)
+    denominator = bids_size_in_window + asks_size_in_window
+    if denominator == 0:
+        return 0.0
+
+    imbalance = (bids_size_in_window - asks_size_in_window) / denominator
     return imbalance
     
 
@@ -238,8 +299,8 @@ def process_market_row(row, client):
     except Exception as e:
         raise ValueError(f"Error processing asks for token {token1}")
 
-    ret['best_bid'] = bids.iloc[-1]['price'] if not bids.empty else 0
-    ret['best_ask'] = asks.iloc[-1]['price'] if not asks.empty else 1
+    ret['best_bid'] = bids.iloc[-1]['price'] if not bids.empty and 'price' in bids.columns else 0
+    ret['best_ask'] = asks.iloc[-1]['price'] if not asks.empty and 'price' in asks.columns else 1
     ret['midpoint'] = (ret['best_bid'] + ret['best_ask']) / 2
     
     TICK_SIZE = row['minimum_tick_size']
@@ -254,50 +315,57 @@ def process_market_row(row, client):
     asks_df['price'] = generate_numbers(ask_from, ask_to, TICK_SIZE)
 
     try:
-        bids_df = bids_df.merge(bids, on='price', how='left').fillna(0)
+        if 'price' in bids.columns:
+            bids_df = bids_df.merge(bids, on='price', how='left')
+        bids_df = bids_df.fillna(0)
     except Exception as e:
         Logan.error(
             f"Error merging bids data for token {token1}",
             namespace="data_updater.find_markets",
             exception=e
         )
-        bids_df = pd.DataFrame()
+        bids_df = pd.DataFrame(columns=['price', 'size'])
 
     try:
-        asks_df = asks_df.merge(asks, on='price', how='left').fillna(0)
+        if 'price' in asks.columns:
+            asks_df = asks_df.merge(asks, on='price', how='left')
+        asks_df = asks_df.fillna(0)
     except Exception as e:
         Logan.error(
             f"Error merging asks data for token {token1}",
             namespace="data_updater.find_markets",
             exception=e
         )
-        asks_df = pd.DataFrame()
+        asks_df = pd.DataFrame(columns=['price', 'size'])
 
     best_bid_reward = 0
     ret_bid = pd.DataFrame()
 
     try:
         ret_bid = calculate_reward_per_100(bids_df, ret['midpoint'], ret['max_spread'], rate)
-        best_bid_reward = round(ret_bid['reward_per_100'].max(), 2)
     except Exception as e:
         Logan.error(
             f"Error calculating bid rewards for token {token1}",
             namespace="data_updater.find_markets",
             exception=e
         )
+        ret_bid = _empty_reward_df()
 
-    best_ask_reward = 0
+    best_bid_reward = round(get_best_reward_value(ret_bid), 2)
+
     ret_ask = pd.DataFrame()
 
     try:
         ret_ask = calculate_reward_per_100(asks_df, ret['midpoint'], ret['max_spread'], rate)
-        best_ask_reward = round(ret_ask['reward_per_100'].max(), 2)
     except Exception as e:
         Logan.error(
             f"Error calculating ask rewards for token {token1}",
             namespace="data_updater.find_markets",
             exception=e
         )
+        ret_ask = _empty_reward_df()
+
+    best_ask_reward = round(get_best_reward_value(ret_ask), 2)
 
     ret['bid_reward_per_100'] = best_bid_reward
     ret['ask_reward_per_100'] = best_ask_reward
