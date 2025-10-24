@@ -1,31 +1,30 @@
 # Poly-Maker
 
-A market making bot for Polymarket prediction markets. This bot automates the process of providing liquidity to markets on Polymarket by maintaining orders on both sides of the book with configurable parameters. A summary of my experience running this bot is available [here](https://x.com/defiance_cr/status/1906774862254800934)
+Poly-Maker now runs as a **passive liquidity rewards engine** for Polymarket. Instead of chasing directional alpha, the process focuses on quoting inside each market's reward band to earn incentive payouts with minimal inventory churn. A summary of the original experience running the legacy trading version is available [here](https://x.com/defiance_cr/status/1906774862254800934).
 
 ## Overview
 
-Poly-Maker is a comprehensive solution for automated market making on Polymarket. It includes:
+Poly-Maker is a focused solution for passive liquidity provision on Polymarket. It includes:
 
+- Reward-band aware quoting that keeps resting orders inside the incentive window
 - Real-time order book monitoring via WebSockets
-- Position management with risk controls
-- Customizable trade parameters fetched from Google Sheets
-- Automated position merging functionality
-- Sophisticated spread and price management
+- Position sizing derived from Google Sheets configuration
+- Automated position merging functionality for on-chain efficiency
 
 ## Structure
 
 The repository consists of several interconnected modules:
 
-- `poly_data`: Core data management and market making logic
+- `poly_data`: Core data management, reward-band quoting, and passive order maintenance
 - `poly_merger`: Utility for merging positions (based on open-source Polymarket code)
 - `poly_stats`: Account statistics tracking
-- `poly_utils`: Shared utility functions
-- `data_updater`: Separate module for collecting market information
+- `poly_utils`: Shared utility functions, including Google Sheets helpers
+- `data_updater`: Separate module for collecting market information and populating sheets
 
 ## Requirements
 
 - Python 3.9 with latest setuptools
-- Node.js (for poly_merger)
+- Node.js (for `poly_merger`)
 - Google Sheets API credentials
 - Polymarket account and API credentials
 
@@ -69,28 +68,29 @@ Make sure your wallet has done at least one trade thru the UI so that the permis
    - Update `SPREADSHEET_URL` in your `.env` file
 
 7. **Update market data**:
-   - Run `python update_markets.py` to fetch all available markets
-   - This should run continuously in the background (preferably on a different IP than your trading bot)
-   - Add markets you want to trade to the "Selected Markets" sheet. You'd wanna select markets from the "Volatility Markets" sheet.
-   - Configure corresponding parameters in the "Hyperparameters" sheet. Default parameters that worked well in November are there.
+   - Run `python update_markets.py` to fetch incentive information and refresh the Google Sheet tabs
+   - Keep this running in the background (ideally on a different IP) so the sheet receives fresh reward-band metrics
+   - Verify markets in the "Selected Markets" sheet, which now reflects the filtered reward candidates produced by `filter_selected_markets`
+   - Tune liquidity limits and offsets in the "Hyperparameters" sheet if the defaults are not suitable
 
-8. **Start the market making bot**:
+8. **Start the passive liquidity loop**:
 ```
 python main.py
 ```
+   The bot syncs with the sheet, calculates reward-band quotes, and maintains resting yes/no orders within the incentive window. There is no directional strategy module anymore—only passive quoting for rewards.
 
 ## Configuration
 
 The bot is configured via a Google Spreadsheet with several worksheets:
 
-- **Selected Markets**: Markets you want to trade
-- **All Markets**: Database of all markets on Polymarket
-- **Hyperparameters**: Configuration parameters for the trading logic
+- **Selected Markets**: Output of the reward-focused selection pipeline. `filter_selected_markets` writes back the latest filtered list so operators can audit what the process is quoting. Seeing the "Successfully wrote …" log simply confirms that the sheet reflects the newest passive selection.
+- **All Markets**: Database of all markets on Polymarket (continuously refreshed by `update_markets.py`)
+- **Hyperparameters**: Configuration parameters used by the reward-band quoting logic (spread offsets, minimum sizes, budget multipliers)
 
 
 ## Poly Merger
 
-The `poly_merger` module is a particularly powerful utility that handles position merging on Polymarket. It's built on open-source Polymarket code and provides a smooth way to consolidate positions, reducing gas fees and improving capital efficiency.
+The `poly_merger` module is a utility that handles position merging on Polymarket. It's built on open-source Polymarket code and provides a smooth way to consolidate positions, reducing gas fees and improving capital efficiency.
 
 ## Important Notes
 

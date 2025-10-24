@@ -26,27 +26,31 @@ def update_sheet(data, worksheet):
     max_cols = max(num_cols, existing_num_cols)
 
     # Create a DataFrame with the maximum size and fill it with empty strings
-    padded_data = pd.DataFrame('', index=range(max_rows), columns=range(max_cols))
+    padded_data = pd.DataFrame('', index=range(
+        max_rows), columns=range(max_cols))
 
     # Update the padded DataFrame with the original data and its columns
     padded_data.iloc[:num_rows, :num_cols] = data.values
     padded_data.columns = list(data.columns) + [''] * (max_cols - num_cols)
 
     # Update the sheet with the padded DataFrame, including column headers
-    set_with_dataframe(worksheet, padded_data, include_index=False, include_column_header=True, resize=True)
+    set_with_dataframe(worksheet, padded_data, include_index=False,
+                       include_column_header=True, resize=True)
+
 
 def sort_df(df):
     # Calculate the mean and standard deviation for each column
     mean_gm = df['gm_reward_per_100'].mean()
     std_gm = df['gm_reward_per_100'].std()
-    
+
     mean_volatility = df['volatility_sum'].mean()
     std_volatility = df['volatility_sum'].std()
-    
+
     # Standardize the columns
     df['std_gm_reward_per_100'] = (df['gm_reward_per_100'] - mean_gm) / std_gm
-    df['std_volatility_sum'] = (df['volatility_sum'] - mean_volatility) / std_volatility
-    
+    df['std_volatility_sum'] = (
+        df['volatility_sum'] - mean_volatility) / std_volatility
+
     # Define a custom scoring function for best_bid and best_ask
     def proximity_score(value):
         if 0.1 <= value <= 0.25:
@@ -55,29 +59,31 @@ def sort_df(df):
             return (value - 0.75) / 0.15
         else:
             return 0
-    
+
     df['bid_score'] = df['best_bid'].apply(proximity_score)
     df['ask_score'] = df['best_ask'].apply(proximity_score)
-    
+
     # Create a composite score (higher is better for rewards, lower is better for volatility, with proximity scores)
     df['composite_score'] = (
-        df['std_gm_reward_per_100'] - 
-        df['std_volatility_sum'] + 
-        df['bid_score'] + 
+        df['std_gm_reward_per_100'] -
+        df['std_volatility_sum'] +
+        df['bid_score'] +
         df['ask_score']
     )
-    
+
     # Sort by the composite score in descending order
     sorted_df = df.sort_values(by='composite_score', ascending=False)
-    
+
     # Drop the intermediate columns used for calculation
-    sorted_df = sorted_df.drop(columns=['std_gm_reward_per_100', 'std_volatility_sum', 'bid_score', 'ask_score', 'composite_score'])
-    
+    sorted_df = sorted_df.drop(columns=[
+                               'std_gm_reward_per_100', 'std_volatility_sum', 'bid_score', 'ask_score', 'composite_score'])
+
     return sorted_df
+
 
 def fetch_and_process_data():
     global spreadsheet, client, wk_all, wk_vol, sel_df
-    
+
     spreadsheet = get_spreadsheet()
     client = get_clob_client()
 
@@ -96,15 +102,16 @@ def fetch_and_process_data():
         namespace="update_markets"
     )
 
-    if len(all_markets_df) > 50:
+    if len(all_markets_df) > 0:
         update_sheet(all_markets_df, wk_all)
     else:
         Logan.warn(
-            f'Not updating sheet because of length {len(all_markets_df)}.',
+            'Skipping sheet update because no reward markets were returned.',
             namespace="update_markets"
         )
 
-if __name__ == "__main__":    
+
+if __name__ == "__main__":
     while True:
         try:
             fetch_and_process_data()
