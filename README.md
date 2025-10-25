@@ -70,7 +70,7 @@ Make sure your wallet has done at least one trade thru the UI so that the permis
 7. **Update market data**:
    - Run `python update_markets.py` to fetch incentive information and refresh the Google Sheet tabs
    - Keep this running in the background (ideally on a different IP) so the sheet receives fresh reward-band metrics
-   - Verify markets in the "Selected Markets" sheet, which now reflects the filtered reward candidates produced by `filter_selected_markets`
+   - Review the "All Markets" sheet for the raw feed and the "Selected Markets" sheet for the current trading universe
    - Tune liquidity limits and offsets in the "Hyperparameters" sheet if the defaults are not suitable
 
 8. **Start the passive liquidity loop**:
@@ -83,9 +83,16 @@ python main.py
 
 The bot is configured via a Google Spreadsheet with several worksheets:
 
-- **Selected Markets**: Output of the reward-focused selection pipeline. `filter_selected_markets` writes back the latest filtered list so operators can audit what the process is quoting. Seeing the "Successfully wrote …" log simply confirms that the sheet reflects the newest passive selection.
-- **All Markets**: Database of all markets on Polymarket (continuously refreshed by `update_markets.py`)
+- **All Markets**: Database of all markets on Polymarket (continuously refreshed by `update_markets.py`). Add a first-column header that normalizes to `Manual Select` (capitalisation/spacing ignored). Any non-empty cell in that column forces the corresponding market into the trading set, regardless of automated filters.
+- **Selected Markets**: Output of the selection pipeline. Manually included rows are tagged with `selection_source = manual`, while the remaining slots are filled automatically based on reward and attractiveness. The sheet is overwritten on every `update_markets.py` run, so make manual picks on the "All Markets" tab instead of editing this sheet directly.
 - **Hyperparameters**: Configuration parameters used by the reward-band quoting logic (spread offsets, minimum sizes, budget multipliers)
+
+### Market Selection Modes
+
+Poly-Maker supports two complementary selection paths:
+
+- **Automatic selection** (default): `filter_selected_markets` applies reward, liquidity, and activity filters, then chooses the top `MARKET_COUNT` markets sorted by `gm_reward_per_100` and `attractiveness_score`.
+- **Manual overrides**: Flag any row in "All Markets" with a non-empty `Manual Select` entry to guarantee inclusion. Those markets occupy the first slots, and the automatic picker fills the remaining capacity. This lets you pin high-conviction markets while still benefiting from dynamic filtering for the rest of the book.
 
 
 ## Poly Merger

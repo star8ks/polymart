@@ -38,31 +38,91 @@ def _determine_trade_size(row):
     return trade_size
 
 
+def _ensure_reward_defaults(row, best_bid, best_ask, tick):
+    reward_floor = _safe_float(row.get('reward_bid_floor'))
+    reward_ceiling = _safe_float(row.get('reward_ask_ceiling'))
+    reward_half = _safe_float(row.get('reward_half_spread'))
+    max_spread_pct = _safe_float(row.get('max_spread'))
+
+    if max_spread_pct <= 0:
+        return row
+
+    max_spread_abs = max_spread_pct / 100.0
+    midpoint = (best_bid + best_ask) / \
+        2 if best_bid is not None and best_ask is not None else None
+
+    adjustments = []
+
+    if reward_half <= 0 and midpoint is not None:
+        reward_half = max(max_spread_abs / 2, tick)
+        row['reward_half_spread'] = reward_half
+        adjustments.append('reward_half_spread')
+
+    if reward_floor <= 0 and midpoint is not None:
+        floor_candidate = max(best_bid - max_spread_abs, tick)
+        if reward_half > 0:
+            floor_candidate = min(floor_candidate, midpoint - reward_half)
+        row['reward_bid_floor'] = max(floor_candidate, tick)
+        adjustments.append('reward_bid_floor')
+
+    if reward_ceiling <= 0 and midpoint is not None:
+        ceiling_candidate = min(best_ask + max_spread_abs, 1 - tick)
+        if reward_half > 0:
+            ceiling_candidate = max(ceiling_candidate, midpoint + reward_half)
+        row['reward_ask_ceiling'] = min(ceiling_candidate, 1 - tick)
+        adjustments.append('reward_ask_ceiling')
+
+    if adjustments:
+        Logan.info(
+            f"Applied default reward band values ({', '.join(adjustments)}) for market {row.get('condition_id')}",
+            namespace="trading"
+        )
+
+    return row
+
+
 def _compute_yes_quotes(midpoint, tick, round_length, row):
     reward_floor = _safe_float(row.get('reward_bid_floor'))
     reward_ceiling = _safe_float(row.get('reward_ask_ceiling'))
     reward_half = _safe_float(row.get('reward_half_spread'))
+    max_spread_pct = _safe_float(row.get('max_spread'))
+    max_spread_abs = max_spread_pct / 100.0 if max_spread_pct > 0 else 0.0
 
-    if reward_half <= 0:
-        reward_half = _safe_float(row.get('max_spread')) / 100.0
+    floor_candidates = []
+    ceiling_candidates = []
 
-    if reward_floor <= 0 or reward_ceiling <= 0 or reward_ceiling <= reward_floor:
-        if reward_half <= 0:
-            return None, None
-        reward_floor = max(midpoint - reward_half, tick)
-        reward_ceiling = min(midpoint + reward_half, 1 - tick)
-    else:
-        reward_floor = max(reward_floor, tick)
-        reward_ceiling = min(reward_ceiling, 1 - tick)
-        if reward_ceiling <= reward_floor:
-            return None, None
-        inferred_half = (reward_ceiling - reward_floor) / 2.0
-        if inferred_half > 0:
-            reward_half = inferred_half if reward_half <= 0 else min(
-                reward_half, inferred_half)
+    if reward_floor > 0:
+        floor_candidates.append(reward_floor)
+    if reward_half > 0:
+        floor_candidates.append(midpoint - reward_half)
+        ceiling_candidates.append(midpoint + reward_half)
+    if max_spread_abs > 0:
+        floor_candidates.append(midpoint - max_spread_abs)
+        ceiling_candidates.append(midpoint + max_spread_abs)
+    if reward_ceiling > 0:
+        ceiling_candidates.append(reward_ceiling)
 
-    band_width = reward_ceiling - reward_floor
-    if band_width <= 0 or band_width <= 2 * tick:
+    floor_candidates = [f for f in floor_candidates if not math.isnan(f)]
+    ceiling_candidates = [c for c in ceiling_candidates if not math.isnan(c)]
+
+    if not floor_candidates or not ceiling_candidates:
+        Logan.warn(
+            f"Reward band incomplete for market {row.get('condition_id')} (floor candidates={floor_candidates}, ceiling candidates={ceiling_candidates})",
+            namespace="trading"
+        )
+        return None, None
+
+    band_floor = max([tick] + floor_candidates)
+    band_ceiling = min([1 - tick] + ceiling_candidates)
+
+    band_floor = min(band_floor, midpoint)
+    band_ceiling = max(band_ceiling, midpoint)
+
+    if band_ceiling - band_floor <= 2 * tick:
+        return None, None
+
+    half_width = min(midpoint - band_floor, band_ceiling - midpoint)
+    if half_width <= tick:
         return None, None
 
     edge_offset = tick * \
@@ -70,38 +130,34 @@ def _compute_yes_quotes(midpoint, tick, round_length, row):
     passive_offset = tick * \
         max(int(getattr(TCNF, 'REWARD_PASSIVE_OFFSET_TICKS', 0)), 0)
 
-    max_edge = max(reward_half - tick, 0.0)
-    if edge_offset > max_edge:
-        edge_offset = max_edge
+    edge_offset = min(edge_offset, max(half_width - tick, 0.0))
+    passive_offset = min(passive_offset, max(
+        half_width - edge_offset - tick, 0.0))
 
-    max_passive = max(reward_half - edge_offset - tick, 0.0)
-    if passive_offset > max_passive:
-        passive_offset = max_passive
+    base_bid = midpoint - half_width + edge_offset
+    base_ask = midpoint + half_width - edge_offset
 
-    base_bid = midpoint - reward_half + edge_offset
-    base_ask = midpoint + reward_half - edge_offset
+    base_bid = max(band_floor, min(base_bid, midpoint - tick))
+    base_ask = min(band_ceiling, max(base_ask, midpoint + tick))
 
-    base_bid = max(reward_floor, min(base_bid, reward_ceiling - tick))
-    base_ask = min(reward_ceiling, max(base_ask, reward_floor + tick))
+    bid_price = max(band_floor, min(
+        base_bid - passive_offset, midpoint - tick))
+    ask_price = min(band_ceiling, max(
+        base_ask + passive_offset, midpoint + tick))
 
-    bid_price = max(reward_floor, min(
-        base_bid - passive_offset, reward_ceiling - tick))
-    ask_price = min(reward_ceiling, max(
-        base_ask + passive_offset, reward_floor + tick))
+    bid_price = round_down(bid_price, round_length)
+    ask_price = round_up(ask_price, round_length)
 
-    bid_price = round_down(max(bid_price, reward_floor), round_length)
-    ask_price = round_up(min(ask_price, reward_ceiling), round_length)
-
-    bid_price = max(reward_floor, min(bid_price, reward_ceiling - tick))
-    ask_price = min(reward_ceiling, max(ask_price, reward_floor + tick))
+    bid_price = max(band_floor, min(bid_price, band_ceiling - tick))
+    ask_price = min(band_ceiling, max(ask_price, band_floor + tick))
 
     if bid_price >= ask_price:
         midpoint_clamped = min(
-            max(midpoint, reward_floor + tick), reward_ceiling - tick)
+            max(midpoint, band_floor + tick), band_ceiling - tick)
         bid_price = round_down(
-            max(midpoint_clamped - tick, reward_floor), round_length)
+            max(midpoint_clamped - tick, band_floor), round_length)
         ask_price = round_up(
-            min(midpoint_clamped + tick, reward_ceiling), round_length)
+            min(midpoint_clamped + tick, band_ceiling), round_length)
 
         if bid_price >= ask_price:
             return None, None
@@ -191,10 +247,34 @@ async def perform_trade(market):
         try:
             row = get_enhanced_market_row(market)
             if row is None:
+                Logan.warn(
+                    f"Market row not found for {market}",
+                    namespace="trading"
+                )
                 return
+
+            selection_source = str(
+                row.get('selection_source', 'auto') or 'auto').lower()
+            if selection_source == 'manual':
+                Logan.info(
+                    f"Processing manual market {market}",
+                    namespace="trading"
+                )
+            else:
+                if not global_state.manual_markets_ready():
+                    global_state.manual_markets_ready(log_details=True)
+                    Logan.debug(
+                        f"Deferring auto market {market} until manual markets have resting orders",
+                        namespace="trading"
+                    )
+                    return
 
             token_yes = str(row['token1'])
             if token_yes not in global_state.order_book_data:
+                Logan.warn(
+                    f"No order book data yet for token {token_yes}",
+                    namespace="trading"
+                )
                 return
 
             tick = _safe_float(row.get('tick_size'), 0.01)
@@ -207,6 +287,10 @@ async def perform_trade(market):
                 book = get_best_bid_ask_deets(token_yes, max(
                     int(_safe_float(row.get('min_size'), 1)), 1))
             except KeyError:
+                Logan.warn(
+                    f"Order book snapshot missing for token {token_yes}",
+                    namespace="trading"
+                )
                 return
 
             best_bid = book.get('best_bid') if book.get(
@@ -219,12 +303,22 @@ async def perform_trade(market):
                 best_ask = _safe_float(row.get('best_ask'))
 
             if best_bid is None or best_ask is None or best_bid <= 0 or best_ask >= 1:
+                Logan.warn(
+                    f"Invalid best bid/ask for {market}: bid={best_bid}, ask={best_ask}",
+                    namespace="trading"
+                )
                 return
+
+            row = _ensure_reward_defaults(row, best_bid, best_ask, tick)
 
             midpoint = (best_bid + best_ask) / 2
             bid_yes, ask_yes = _compute_yes_quotes(
                 midpoint, tick, tick_decimals, row)
             if bid_yes is None or ask_yes is None:
+                Logan.warn(
+                    f"Failed to compute quotes for {market} (midpoint={midpoint:.4f}, tick={tick})",
+                    namespace="trading"
+                )
                 return
 
             trade_size = _determine_trade_size(row)
@@ -280,7 +374,30 @@ async def perform_trade(market):
                             namespace="trading",
                             exception=exc
                         )
+                if selection_source == 'manual':
+                    skip_reason = None
+                    if liquidity <= 0:
+                        skip_reason = f"insufficient liquidity ({liquidity:.2f})"
+                    elif min_size > 0 and liquidity < min_size:
+                        skip_reason = f"min_size {min_size:.2f} exceeds available liquidity {liquidity:.2f}"
+                    elif trade_size <= 0:
+                        skip_reason = f"trade size is zero"
+                    elif remaining_capacity <= 0 and sell_size <= 0:
+                        skip_reason = f"no capacity (position={position_yes:.2f}, max={max_position:.2f})"
+                    elif sell_size <= 0 and position_yes <= 0:
+                        skip_reason = "no inventory to sell"
+                    else:
+                        skip_reason = "unable to build resting orders"
+
+                    global_state.set_manual_unserviceable(market, skip_reason)
+                    Logan.warn(
+                        f"Manual market {market} skipped: {skip_reason}",
+                        namespace="trading"
+                    )
                 return
+
+            if selection_source == 'manual':
+                global_state.clear_manual_unserviceable(market)
 
             existing_orders_yes = get_order(token_yes)
             if _orders_need_update(existing_orders_yes, desired_orders):

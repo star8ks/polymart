@@ -10,39 +10,34 @@ These are currently stub implementations that can be filled in with custom logic
 
 from typing import Dict, Optional, Tuple
 from dataclasses import dataclass
-import pandas as pd
-import poly_data.global_state as global_state
+
 import numpy as np
-from logan import Logan
-from poly_data.utils import get_sheet_df
-from poly_utils.google_utils import get_spreadsheet
-from gspread_dataframe import set_with_dataframe
+import pandas as pd
+
+import poly_data.global_state as global_state
 from configuration import TCNF
+from gspread_dataframe import set_with_dataframe
+from logan import Logan
+from poly_utils.google_utils import get_spreadsheet
 
 
 @dataclass
 class PositionSizeResult:
-    """Result of position sizing calculation"""
+    """Container for trade sizing outputs."""
+
     trade_size: float
     max_size: float
 
 
-@dataclass
-class Position:
-    """Represents a trading position"""
-    size: float
-    avgPrice: float
-
-
 def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Filter and select markets based on various criteria.
+    Filter and select markets based on various criteria while honoring manual overrides.
 
     Applies the following filters in order:
     1. Volatility filtering (volatility_sum threshold)
     2. Attractiveness score minimum threshold
     3. Midpoint range filtering (avoid extreme probabilities)
-    4. Top-N selection by attractiveness_score
+    4. Top-N selection by attractiveness_score (manual selections always included)
     """
     df = markets_df.copy()
     initial_count = len(df)
@@ -55,15 +50,21 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
         'best_ask',
         'rewards_daily_rate',
         'min_size',
-        'max_spread'
+        'max_spread',
+        'condition_id'
     ]
     missing_cols = [col for col in required_cols if col not in df.columns]
     if missing_cols:
         raise Exception(f"Required columns missing: {missing_cols}")
 
     # Define activity columns that might be present
-    activity_cols = ['total_volume', 'volume_usd', 'decay_weighted_volume', 'avg_trades_per_day',
-                     'unique_traders']
+    activity_cols = [
+        'total_volume',
+        'volume_usd',
+        'decay_weighted_volume',
+        'avg_trades_per_day',
+        'unique_traders'
+    ]
 
     # Convert columns to numeric, handling any string/NaN values
     numeric_cols = [
@@ -85,30 +86,77 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
 
+    # Calculate midpoint if not already present
+    if 'midpoint' not in df.columns:
+        df['midpoint'] = (df['best_bid'] + df['best_ask']) / 2
+
+    # Detect manual overrides (column name normalized to manual_select)
+    manual_col = next(
+        (
+            col
+            for col in df.columns
+            if col and col.strip().lower().replace(' ', '_') == 'manual_select'
+        ),
+        None
+    )
+
+    manual_rows = pd.DataFrame(columns=df.columns)
+    manual_ids: list[str] = []
+    if manual_col:
+        manual_series = df[manual_col].fillna('').astype(str).str.strip()
+        manual_series = manual_series.replace(
+            {'nan': '', 'NaN': '', 'None': ''})
+        manual_mask = manual_series != ''
+        if manual_mask.any():
+            manual_rows = df[manual_mask].copy()
+            manual_ids = [str(cid)
+                          for cid in manual_rows['condition_id'].astype(str)]
+            Logan.info(
+                f"Manual overrides detected: {len(manual_ids)} markets flagged via '{manual_col}'",
+                namespace="poly_data.market_selection"
+            )
+            Logan.info(
+                f"Manual override IDs: {manual_ids}",
+                namespace="poly_data.market_selection"
+            )
+
+    manual_id_set = set(manual_ids)
+
+    def ensure_manual(current_df: pd.DataFrame) -> pd.DataFrame:
+        if not manual_id_set:
+            return current_df
+
+        current_df = current_df.copy()
+        current_ids = set(current_df['condition_id'].astype(str))
+        missing_ids = [cid for cid in manual_ids if cid not in current_ids]
+        if missing_ids:
+            additions = manual_rows[
+                manual_rows['condition_id'].astype(str).isin(missing_ids)
+            ].copy()
+            additions = additions.reindex(
+                columns=current_df.columns, fill_value=pd.NA)
+            current_df = pd.concat(
+                [additions, current_df], ignore_index=True, sort=False)
+        return current_df
+
+    df = ensure_manual(df)
+
     # Focus on markets with active liquidity rewards
-    df = df[(df['rewards_daily_rate'] > 0) & (
-        df['min_size'] > 0) & (df['max_spread'] > 0)]
+    df = df[
+        (df['rewards_daily_rate'] > 0)
+        & (df['min_size'] > 0)
+        & (df['max_spread'] > 0)
+    ].copy()
+    df = ensure_manual(df)
     Logan.info(
         f"After rewards filter: {len(df)}/{initial_count} markets offering incentives",
         namespace="poly_data.market_selection"
     )
 
-    min_reward = max(getattr(TCNF, 'MIN_REWARD_PER_100_USD', 0.0), 0.0)
-    if min_reward > 0 and 'gm_reward_per_100' in df.columns:
-        df = df[df['gm_reward_per_100'].fillna(0) >= min_reward]
-        avg_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
-        Logan.info(
-            f"After reward floor filter (≥{min_reward} USD/100): {len(df)}/{initial_count} markets (avg reward: {avg_reward:.2f})",
-            namespace="poly_data.market_selection"
-        )
-
-    # Calculate midpoint if not already present
-    if 'midpoint' not in df.columns:
-        df['midpoint'] = (df['best_bid'] + df['best_ask']) / 2
-
-    # 1. Filter by volatility sum
+    # Filter by volatility sum
     if TCNF.MAX_VOLATILITY_SUM > 0:
-        df = df[df['volatility_sum'] <= TCNF.MAX_VOLATILITY_SUM]
+        df = df[df['volatility_sum'] <= TCNF.MAX_VOLATILITY_SUM].copy()
+        df = ensure_manual(df)
         avg_attractiveness = df['attractiveness_score'].mean() if len(
             df) > 0 else 0
         avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
@@ -118,9 +166,11 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
             namespace="poly_data.market_selection"
         )
 
-    # 2. Filter by minimum attractiveness score
+    # Filter by minimum attractiveness score
     if TCNF.MIN_ATTRACTIVENESS_SCORE > 0:
-        df = df[df['attractiveness_score'] >= TCNF.MIN_ATTRACTIVENESS_SCORE]
+        df = df[df['attractiveness_score'] >=
+                TCNF.MIN_ATTRACTIVENESS_SCORE].copy()
+        df = ensure_manual(df)
         avg_attractiveness = df['attractiveness_score'].mean() if len(
             df) > 0 else 0
         avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
@@ -130,9 +180,12 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
             namespace="poly_data.market_selection"
         )
 
-    # 3. Filter by midpoint range (avoid extreme probabilities)
-    df = df[(df['midpoint'] >= TCNF.MIN_PRICE_LIMIT) &
-            (df['midpoint'] <= TCNF.MAX_PRICE_LIMIT)]
+    # Filter by midpoint range (avoid extreme probabilities)
+    df = df[
+        (df['midpoint'] >= TCNF.MIN_PRICE_LIMIT)
+        & (df['midpoint'] <= TCNF.MAX_PRICE_LIMIT)
+    ].copy()
+    df = ensure_manual(df)
     avg_attractiveness = df['attractiveness_score'].mean() if len(
         df) > 0 else 0
     avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
@@ -142,19 +195,23 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
         namespace="poly_data.market_selection"
     )
 
-    # 4. Filter out markets with spread greater than max spread
-    df = df[(df['spread'] * 100 <= df['max_spread'])]
-    avg_attractiveness = df['attractiveness_score'].mean() if len(
-        df) > 0 else 0
-    avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
-    Logan.info(
-        f"After max spread filter (spread <= max spread): {len(df)}/{initial_count} markets "
-        f"(avg attractiveness: {avg_attractiveness:.2f}, avg GM reward: {avg_gm_reward:.2f})",
-        namespace="poly_data.market_selection"
-    )
+    # Filter out markets with spread greater than max spread
+    if 'spread' in df.columns:
+        df = df[(df['spread'] * 100 <= df['max_spread'])].copy()
+        df = ensure_manual(df)
+        avg_attractiveness = df['attractiveness_score'].mean() if len(
+            df) > 0 else 0
+        avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
+        Logan.info(
+            f"After max spread filter (spread <= max spread): {len(df)}/{initial_count} markets "
+            f"(avg attractiveness: {avg_attractiveness:.2f}, avg GM reward: {avg_gm_reward:.2f})",
+            namespace="poly_data.market_selection"
+        )
 
-    # 5. Filter by market order imbalance
-    df = df[df['market_order_imbalance'].abs() <= TCNF.MAX_MARKET_ORDER_IMBALANCE]
+    # Filter by market order imbalance
+    df = df[df['market_order_imbalance'].abs(
+    ) <= TCNF.MAX_MARKET_ORDER_IMBALANCE].copy()
+    df = ensure_manual(df)
     avg_attractiveness = df['attractiveness_score'].mean() if len(
         df) > 0 else 0
     avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
@@ -164,10 +221,11 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
         namespace="poly_data.market_selection"
     )
 
-    # 5. Activity-based filtering (only if activity metrics are available)
+    # Activity-based filtering (only if activity metrics are available)
     if 'total_volume' in df.columns:
-        # Filter by minimum total volume
-        df = df[df['total_volume'].fillna(0) >= TCNF.MIN_TOTAL_VOLUME]
+        condition = df['total_volume'].fillna(0) >= TCNF.MIN_TOTAL_VOLUME
+        df = df[condition].copy()
+        df = ensure_manual(df)
         avg_attractiveness = df['attractiveness_score'].mean() if len(
             df) > 0 else 0
         avg_gm_reward = df['gm_reward_per_100'].mean() if len(df) > 0 else 0
@@ -177,9 +235,10 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
             namespace="poly_data.market_selection"
         )
 
-        # Filter by minimum USD volume
         if 'volume_usd' in df.columns:
-            df = df[df['volume_usd'].fillna(0) >= TCNF.MIN_VOLUME_USD]
+            condition = df['volume_usd'].fillna(0) >= TCNF.MIN_VOLUME_USD
+            df = df[condition].copy()
+            df = ensure_manual(df)
             avg_attractiveness = df['attractiveness_score'].mean() if len(
                 df) > 0 else 0
             avg_gm_reward = df['gm_reward_per_100'].mean() if len(
@@ -190,10 +249,11 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
                 namespace="poly_data.market_selection"
             )
 
-        # Filter by minimum decay-weighted volume
         if 'decay_weighted_volume' in df.columns:
-            df = df[df['decay_weighted_volume'].fillna(
-                0) >= TCNF.MIN_DECAY_WEIGHTED_VOLUME]
+            condition = df['decay_weighted_volume'].fillna(
+                0) >= TCNF.MIN_DECAY_WEIGHTED_VOLUME
+            df = df[condition].copy()
+            df = ensure_manual(df)
             avg_attractiveness = df['attractiveness_score'].mean() if len(
                 df) > 0 else 0
             avg_gm_reward = df['gm_reward_per_100'].mean() if len(
@@ -204,10 +264,11 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
                 namespace="poly_data.market_selection"
             )
 
-        # Filter by minimum average trades per day
         if 'avg_trades_per_day' in df.columns:
-            df = df[df['avg_trades_per_day'].fillna(
-                0) >= TCNF.MIN_AVG_TRADES_PER_DAY]
+            condition = df['avg_trades_per_day'].fillna(
+                0) >= TCNF.MIN_AVG_TRADES_PER_DAY
+            df = df[condition].copy()
+            df = ensure_manual(df)
             avg_attractiveness = df['attractiveness_score'].mean() if len(
                 df) > 0 else 0
             avg_gm_reward = df['gm_reward_per_100'].mean() if len(
@@ -218,9 +279,11 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
                 namespace="poly_data.market_selection"
             )
 
-        # Filter by minimum unique traders
         if 'unique_traders' in df.columns:
-            df = df[df['unique_traders'].fillna(0) >= TCNF.MIN_UNIQUE_TRADERS]
+            condition = df['unique_traders'].fillna(
+                0) >= TCNF.MIN_UNIQUE_TRADERS
+            df = df[condition].copy()
+            df = ensure_manual(df)
             avg_attractiveness = df['attractiveness_score'].mean() if len(
                 df) > 0 else 0
             avg_gm_reward = df['gm_reward_per_100'].mean() if len(
@@ -232,10 +295,12 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
             )
 
         if 'order_arrival_rate_sensitivity' in df.columns:
-            df = df[df['order_arrival_rate_sensitivity'].fillna(
-                0) >= TCNF.MIN_ARRIVAL_RATE_SENSITIVITY]
-            df = df[df['order_arrival_rate_sensitivity'].fillna(
-                0) <= TCNF.MAX_ARRIVAL_RATE_SENSITIVITY]
+            lower_condition = df['order_arrival_rate_sensitivity'].fillna(
+                0) >= TCNF.MIN_ARRIVAL_RATE_SENSITIVITY
+            upper_condition = df['order_arrival_rate_sensitivity'].fillna(
+                0) <= TCNF.MAX_ARRIVAL_RATE_SENSITIVITY
+            df = df[lower_condition & upper_condition].copy()
+            df = ensure_manual(df)
             avg_attractiveness = df['attractiveness_score'].mean() if len(
                 df) > 0 else 0
             avg_gm_reward = df['gm_reward_per_100'].mean() if len(
@@ -260,31 +325,97 @@ def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
             namespace="poly_data.market_selection"
         )
 
-    # 5. Sort by attractiveness score and take top N
-    sort_columns = []
-    if 'gm_reward_per_100' in df.columns:
+    df = ensure_manual(df)
+
+    # Prepare final selection dataframes
+    df['condition_id'] = df['condition_id'].astype(str)
+    df_unique = df.drop_duplicates(subset='condition_id', keep='first').copy()
+
+    manual_selection = df_unique.iloc[0:0].copy()
+    manual_order = manual_ids
+    if manual_order:
+        frames = []
+        for cid in manual_order:
+            match = df_unique[df_unique['condition_id'] == cid]
+            if match.empty:
+                fallback = manual_rows[manual_rows['condition_id'].astype(
+                    str) == cid].copy()
+                fallback = fallback.reindex(
+                    columns=df_unique.columns, fill_value=pd.NA)
+                match = fallback
+            if not match.empty:
+                frames.append(match.iloc[0:1])
+        if frames:
+            manual_selection = pd.concat(frames, ignore_index=True, sort=False)
+        manual_selection['selection_source'] = 'manual'
+
+    auto_pool = df_unique[~df_unique['condition_id'].isin(manual_order)].copy()
+    sort_columns: list[str] = []
+    if 'gm_reward_per_100' in auto_pool.columns:
         sort_columns.append('gm_reward_per_100')
     sort_columns.append('attractiveness_score')
-    df_sorted = df.sort_values(by=sort_columns, ascending=[
-                               False] * len(sort_columns), na_position='last')
-    result = df_sorted.head(TCNF.MARKET_COUNT).reset_index(drop=True)
+    ascending_flags = [False] * len(sort_columns)
+    auto_pool_sorted = auto_pool.sort_values(
+        by=sort_columns,
+        ascending=ascending_flags,
+        na_position='last'
+    )
+
+    auto_slots = max(TCNF.MARKET_COUNT - len(manual_order), 0)
+    auto_selected = auto_pool_sorted.head(auto_slots).copy()
+    if not auto_selected.empty:
+        auto_selected['selection_source'] = 'auto'
+
+    result = pd.concat([manual_selection, auto_selected],
+                       ignore_index=True, sort=False)
+    result = result.drop_duplicates(subset='condition_id', keep='first')
+
+    if manual_col and manual_col in result.columns:
+        result[manual_col] = result[manual_col].fillna('')
+    if 'selection_source' in result.columns:
+        result['selection_source'] = result['selection_source'].fillna('auto')
+    else:
+        result['selection_source'] = pd.Series(
+            ['auto'] * len(result), dtype=str)
+
+    if manual_ids:
+        present_ids = set(result['condition_id'].astype(str))
+        missing_manual = [cid for cid in manual_ids if cid not in present_ids]
+        if missing_manual:
+            Logan.warn(
+                f"Manual selections filtered out: {missing_manual}",
+                namespace="poly_data.market_selection"
+            )
 
     final_avg_attractiveness = result['attractiveness_score'].mean() if len(
         result) > 0 else 0
     final_avg_gm_reward = result['gm_reward_per_100'].mean() if len(
         result) > 0 else 0
     Logan.info(
-        f"Final selection: {len(result)}/{initial_count} markets (top {TCNF.MARKET_COUNT}) "
+        f"Final selection: {len(result)}/{initial_count} markets (manual: {len(manual_selection)}, auto: {len(auto_selected)}) "
         f"(avg attractiveness: {final_avg_attractiveness:.2f}, avg GM reward: {final_avg_gm_reward:.2f})",
         namespace="poly_data.market_selection"
     )
+
+    try:
+        manual_ids = result[result['selection_source']
+                            == 'manual']['condition_id'].astype(str).tolist()
+        auto_ids = result[result['selection_source']
+                          != 'manual']['condition_id'].astype(str).tolist()
+        global_state.set_selection_groups(manual_ids, auto_ids)
+    except Exception as e:
+        Logan.error(
+            "Failed to update selection groups",
+            namespace="poly_data.market_selection",
+            exception=e
+        )
 
     # Write selected markets back to the Selected Markets sheet
     try:
         write_selected_markets_to_sheet(result)
     except Exception as e:
         Logan.error(
-            f"Failed to write selected markets to sheet",
+            "Failed to write selected markets to sheet",
             namespace="poly_data.market_selection",
             exception=e
         )
@@ -321,6 +452,21 @@ def write_selected_markets_to_sheet(selected_df: pd.DataFrame):
             'condition_id'
         ]
 
+        manual_col = next(
+            (
+                col
+                for col in selected_df.columns
+                if col and col.strip().lower().replace(' ', '_') == 'manual_select'
+            ),
+            None
+        )
+
+        if manual_col:
+            base_output_cols = [manual_col] + base_output_cols
+
+        if 'selection_source' in selected_df.columns:
+            base_output_cols.append('selection_source')
+
         # Add activity columns if they exist
         activity_output_cols = [
             'total_volume', 'volume_usd', 'avg_trades_per_day', 'unique_traders']
@@ -328,13 +474,14 @@ def write_selected_markets_to_sheet(selected_df: pd.DataFrame):
             col for col in activity_output_cols if col in selected_df.columns]
 
         output_cols = base_output_cols + available_activity_cols
-        output_df = selected_df[[
-            col for col in output_cols if col in selected_df.columns]].copy()
+        header_cols = [
+            col for col in output_cols if col in selected_df.columns]
+        output_df = selected_df[header_cols].copy()
 
         if output_df.empty:
             worksheet.clear()
-            if output_cols:
-                worksheet.update('A1', [output_cols])
+            if header_cols:
+                worksheet.update('A1', [header_cols])
             Logan.info(
                 "Selected markets list is empty; wrote headers only",
                 namespace="poly_data.market_selection"

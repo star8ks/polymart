@@ -21,21 +21,90 @@ def update_sheet(data, worksheet):
     existing_num_rows = len(all_values)
     existing_num_cols = len(all_values[0]) if all_values else 0
 
+    manual_col = None
+    manual_map = None
+    manual_rows = None
+
+    if existing_num_rows > 0:
+        header = all_values[0]
+        rows = all_values[1:]
+        existing_df = pd.DataFrame(rows, columns=header)
+
+        manual_col = next(
+            (
+                col
+                for col in existing_df.columns
+                if col and col.strip().lower().replace(' ', '_') == 'manual_select'
+            ),
+            None
+        )
+
+        if manual_col and 'condition_id' in existing_df.columns:
+            existing_df['condition_id'] = existing_df['condition_id'].astype(
+                str)
+
+            manual_series = existing_df[manual_col].fillna(
+                '').astype(str).str.strip()
+            manual_series = manual_series.replace(
+                {'nan': '', 'NaN': '', 'None': ''})
+
+            manual_rows = existing_df[manual_series != ''].copy()
+            if not manual_rows.empty:
+                manual_rows = manual_rows.drop_duplicates(
+                    subset='condition_id', keep='first'
+                )
+
+            manual_map = existing_df[['condition_id', manual_col]].copy()
+            manual_map = manual_map[manual_map['condition_id'].str.strip(
+            ) != '']
+            manual_map = manual_map.drop_duplicates(
+                subset='condition_id', keep='first')
+            manual_map = manual_map.set_index('condition_id')
+
+    data = data.copy()
+
+    if 'condition_id' in data.columns:
+        data['condition_id'] = data['condition_id'].astype(str)
+
+    if manual_rows is not None and not manual_rows.empty and 'condition_id' in data.columns:
+        current_ids = set(data['condition_id'].astype(str))
+        missing_manual = manual_rows[~manual_rows['condition_id'].isin(
+            current_ids)].copy()
+
+        if not missing_manual.empty:
+            combined_columns = list(dict.fromkeys(
+                list(data.columns) + list(missing_manual.columns)))
+            data = data.reindex(columns=combined_columns)
+            missing_manual = missing_manual.reindex(
+                columns=combined_columns, fill_value='')
+            data = pd.concat([data, missing_manual],
+                             ignore_index=True, sort=False)
+
+    if manual_map is not None and 'condition_id' in data.columns:
+        data = data.drop_duplicates(subset='condition_id', keep='first')
+        data = data.set_index('condition_id')
+        data[manual_col] = manual_map.reindex(data.index)[manual_col]
+        data = data.reset_index()
+        cols = [manual_col] + [c for c in data.columns if c != manual_col]
+        data = data[cols]
+
     num_rows, num_cols = data.shape
     max_rows = max(num_rows, existing_num_rows)
     max_cols = max(num_cols, existing_num_cols)
 
-    # Create a DataFrame with the maximum size and fill it with empty strings
     padded_data = pd.DataFrame('', index=range(
         max_rows), columns=range(max_cols))
 
-    # Update the padded DataFrame with the original data and its columns
     padded_data.iloc[:num_rows, :num_cols] = data.values
     padded_data.columns = list(data.columns) + [''] * (max_cols - num_cols)
 
-    # Update the sheet with the padded DataFrame, including column headers
-    set_with_dataframe(worksheet, padded_data, include_index=False,
-                       include_column_header=True, resize=True)
+    set_with_dataframe(
+        worksheet,
+        padded_data,
+        include_index=False,
+        include_column_header=True,
+        resize=True
+    )
 
 
 def sort_df(df):

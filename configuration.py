@@ -14,7 +14,7 @@ class TradingConfig:
     MIN_PRICE_LIMIT = 0.1
     MAX_PRICE_LIMIT = 0.9
     PRICE_PRECISION_LIMIT = 0.99  # Box sum guard threshold
-    ORDER_EXPIRATION_SEC = 900
+    ORDER_EXPIRATION_SEC = 7200  # Keep resting quotes alive for up to 2 hours
 
     # Order cancellation thresholds
     # NOTE: Threshold might need adjustment for markets with lower tick sizes.
@@ -27,21 +27,21 @@ class TradingConfig:
 
     # Market selection and investment parameters
     INVESTMENT_CEILING = 2000
-    MAX_POSITION_MULT = 3
+    MAX_POSITION_MULT = 6
     BUDGET_MULT = 1.5
     MARKET_COUNT = 20
 
     # Liquidity reward focused parameters
     # Stay at least this many ticks inside the reward band boundaries
-    REWARD_EDGE_OFFSET_TICKS = 1
+    REWARD_EDGE_OFFSET_TICKS = 2
     # Additional ticks to shade quotes away from the top of book
-    REWARD_PASSIVE_OFFSET_TICKS = 1
+    REWARD_PASSIVE_OFFSET_TICKS = 2
     # Cap trade size to min_size * multiplier (multiplier >= 1)
     REWARD_TRADE_SIZE_MULTIPLIER = 1.0
     # Do not scale positions beyond this multiple of trade size
     REWARD_MAX_POSITION_MULTIPLIER = 1.5
     # Filter for markets with at least this incentive per 100 YES shares
-    MIN_REWARD_PER_100_USD = 50.0
+    MIN_REWARD_PER_100_USD = 1.0
 
     # Risk management thresholds
     MAX_VOLATILITY_SUM = 14.0

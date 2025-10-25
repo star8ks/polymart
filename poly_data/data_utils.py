@@ -358,14 +358,8 @@ def update_markets():
             for col in ['token1', 'token2']:
                 row[col] = str(row[col])
 
-            if row['token1'] not in global_state.all_tokens:
-                global_state.all_tokens.append(row['token1'])
-
-            if row['token1'] not in global_state.REVERSE_TOKENS:
-                global_state.REVERSE_TOKENS[row['token1']] = row['token2']
-
-            if row['token2'] not in global_state.REVERSE_TOKENS:
-                global_state.REVERSE_TOKENS[row['token2']] = row['token1']
+            global_state.register_market_tokens(
+                row['token1'], row['token2'], row.get('condition_id'))
 
             for col2 in [f"{row['token1']}_buy", f"{row['token1']}_sell", f"{row['token2']}_buy", f"{row['token2']}_sell"]:
                 if col2 not in global_state.performing:
