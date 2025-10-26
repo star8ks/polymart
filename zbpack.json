@@ -1,4 +1,4 @@
 {
-    "build_command": "pip install && pip install git+https://github.com/merijjeyn/logan.git",
+    "build_command": "pip install -r requirements.txt && pip install git+https://github.com/merijjeyn/logan.git",
     "start_command": "python main.py"
 }
