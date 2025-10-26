@@ -29,7 +29,7 @@ class TradingConfig:
     INVESTMENT_CEILING = 2000
     MAX_POSITION_MULT = 6
     BUDGET_MULT = 1.5
-    MARKET_COUNT = 20
+    MARKET_COUNT = 10
 
     # Liquidity reward focused parameters
     # Stay at least this many ticks inside the reward band boundaries
@@ -42,6 +42,8 @@ class TradingConfig:
     REWARD_MAX_POSITION_MULTIPLIER = 1.5
     # Filter for markets with at least this incentive per 100 YES shares
     MIN_REWARD_PER_100_USD = 1.0
+    # Refresh interval for per-market sheet snapshots before submitting orders (seconds)
+    MARKET_ROW_REFRESH_SECONDS = 60
 
     # Risk management thresholds
     MAX_VOLATILITY_SUM = 14.0
