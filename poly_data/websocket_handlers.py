@@ -5,6 +5,7 @@ import websockets                  # WebSocket client
 from logan import Logan
 
 from poly_data.data_processing import process_data, process_user_data
+from trading import perform_trade
 import poly_data.global_state as global_state
 from configuration import MCNF
 
