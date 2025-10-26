@@ -32,8 +32,8 @@ The repository consists of several interconnected modules:
 
 1. **Clone the repository**:
 ```
-git clone https://github.com/yourusername/poly-maker.git
-cd poly-maker
+git clone https://github.com/star8ks/polymart.git
+cd polymart
 ```
 
 2. **Install Python dependencies**:
