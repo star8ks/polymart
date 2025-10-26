@@ -52,7 +52,7 @@ async def connect_market_websocket(chunk):
                 last_version = version
 
                 Logan.info(
-                    f"Subscribed to {len(tokens)} assets (version {last_version})",
+                    f"Subscribed to {len(tokens_ordered)} assets (version {last_version})",
                     namespace="websocket_handlers"
                 )
 
