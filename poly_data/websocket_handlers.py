@@ -32,14 +32,14 @@ async def connect_market_websocket(chunk):
     last_version = -1
 
     while True:
-        tokens, version = global_state.get_token_snapshot()
+        tokens_ordered, version = global_state.get_token_snapshot()
         if base_tokens:
-            combined = base_tokens + tokens
-            # Preserve order while deduplicating
+            combined = base_tokens + tokens_ordered
             seen = set()
-            tokens = [t for t in combined if not (t in seen or seen.add(t))]
+            tokens_ordered = [t for t in combined if not (
+                t in seen or seen.add(t))]
 
-        if not tokens:
+        if not tokens_ordered:
             await asyncio.sleep(1)
             continue
 
@@ -47,7 +47,7 @@ async def connect_market_websocket(chunk):
 
         try:
             async with websockets.connect(uri, ping_interval=MCNF.WEBSOCKET_PING_INTERVAL, ping_timeout=None) as websocket:
-                subscription = {"assets_ids": tokens}
+                subscription = {"assets_ids": tokens_ordered}
                 await websocket.send(json.dumps(subscription))
                 last_version = version
 
@@ -74,8 +74,48 @@ async def connect_market_websocket(chunk):
                             continue
 
                         json_data = json.loads(message)
-                        # Process order book updates and trigger trading as needed
-                        process_data(json_data)
+                        if not json_data:
+                            continue
+
+                        events = json_data if isinstance(
+                            json_data, list) else [json_data]
+                        ready_to_trade = global_state.manual_markets_ready()
+
+                        for event in events:
+                            if not isinstance(event, dict):
+                                continue
+
+                            market_id = event.get('market')
+                            if not market_id:
+                                process_data(event)
+                                continue
+
+                            if market_id in global_state.manual_condition_ids:
+                                process_data(event)
+                                try:
+                                    asyncio.create_task(
+                                        perform_trade(market_id))
+                                except Exception as exc:
+                                    Logan.error(
+                                        f"Scheduling trade for manual market {market_id} failed",
+                                        namespace="websocket_handlers",
+                                        exception=exc
+                                    )
+                                continue
+
+                            if not ready_to_trade:
+                                process_data(event)
+                                continue
+
+                            process_data(event)
+                            try:
+                                asyncio.create_task(perform_trade(market_id))
+                            except Exception as exc:
+                                Logan.error(
+                                    f"Scheduling trade for auto market {market_id} failed",
+                                    namespace="websocket_handlers",
+                                    exception=exc
+                                )
 
                 except websockets.ConnectionClosed as e:
                     Logan.error(

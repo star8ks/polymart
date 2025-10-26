@@ -298,17 +298,32 @@ def get_order(token):
 
 
 def set_order(token, side, size, price):
-    curr = {}
-    curr = {side: {'price': 0, 'size': 0}}
+    token = str(token)
+    side = side.lower()
+    if side not in ('buy', 'sell'):
+        Logan.warn(
+            f"Ignoring set_order with invalid side '{side}' for token {token}",
+            namespace="poly_data.data_utils"
+        )
+        return
 
-    curr[side]['size'] = float(size)
-    curr[side]['price'] = float(price)
+    if token not in global_state.orders or not isinstance(global_state.orders[token], dict):
+        global_state.orders[token] = {
+            'buy': {'price': 0.0, 'size': 0.0},
+            'sell': {'price': 0.0, 'size': 0.0}
+        }
 
-    global_state.orders[str(token)] = curr
-    Logan.info(
-        f"Updated order, set to {curr}",
-        namespace="poly_data.data_utils"
-    )
+    order_entry = global_state.orders[token]
+    other_side = 'sell' if side == 'buy' else 'buy'
+    if other_side not in order_entry:
+        order_entry[other_side] = {'price': 0.0, 'size': 0.0}
+
+    order_entry[side] = {
+        'price': float(price),
+        'size': float(size)
+    }
+
+    global_state.orders[token] = order_entry
 
 
 def update_markets_with_positions():
