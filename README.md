@@ -61,9 +61,9 @@ cp .env.example .env
 Make sure your wallet has done at least one trade thru the UI so that the permissions are proper.
 
 6. **Set up Google Sheets integration**:
-   - Create a Google Service Account and download json credential file as credentials.json to the main directory
+   -[Create a Google Service Account](https://docs.cloud.google.com/iam/docs/service-accounts-create) and download json credential file as credentials.json to the main directory
    - Enable Google Sheets API for the google cloud project at [this page](https://console.cloud.google.com/apis/library/sheets.googleapis.com)
-   - Copy the [sample Google Sheet](https://docs.google.com/spreadsheets/d/1yST71iAMQswCYTFfqKDDgPbDZLC7JWV7rwKIVu1OGnw/edit?usp=sharing)
+   - Copy the [sample Google Sheet](https://docs.google.com/spreadsheets/d/read1yST71iAMQswCYTFfqKDDgPbDZLC7JWV7rwKIVu1OGnw/edit?usp=sharing)
    - Add your Google service account to the sheet with edit permissions
    - Update `SPREADSHEET_URL` in your `.env` file
 
