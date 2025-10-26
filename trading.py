@@ -9,7 +9,7 @@ from configuration import TCNF
 from poly_data.orders_in_flight import get_orders_in_flight, set_order_in_flight
 from poly_data.trading_utils import get_best_bid_ask_deets, round_down, round_up
 from poly_data.data_utils import get_position, get_order
-from poly_data.market_selection import get_enhanced_market_row
+from poly_data.market_selection import get_enhanced_market_row, get_latest_market_snapshot
 
 
 def _safe_float(value, default=0.0):
@@ -198,6 +198,24 @@ def _orders_need_update(existing_orders, desired_orders):
     return False
 
 
+def _manual_orders_match(state, desired_orders):
+    if state is None or not desired_orders:
+        return False
+
+    existing = {
+        'buy': {
+            'price': getattr(state, 'buy_price', 0.0),
+            'size': getattr(state, 'buy_size', 0.0)
+        },
+        'sell': {
+            'price': getattr(state, 'sell_price', 0.0),
+            'size': getattr(state, 'sell_size', 0.0)
+        }
+    }
+
+    return not _orders_need_update(existing, desired_orders)
+
+
 def _handle_create_order_response(resp, order, side):
     if isinstance(resp, dict) and resp.get('success') and resp.get('orderID'):
         set_order_in_flight(
@@ -233,6 +251,17 @@ def _submit_order(order, side):
     _handle_create_order_response(resp, order, side)
 
 
+async def _refresh_market_snapshot(condition_id: str):
+    """Fetch the latest sheet snapshot for a market without blocking the event loop."""
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return get_latest_market_snapshot(condition_id)
+
+    return await loop.run_in_executor(None, get_latest_market_snapshot, condition_id)
+
+
 market_locks = {}
 
 
@@ -253,23 +282,72 @@ async def perform_trade(market):
                 )
                 return
 
+            row = row.copy()
             selection_source = str(
                 row.get('selection_source', 'auto') or 'auto').lower()
+            condition_id = str(market)
+
             if selection_source == 'manual':
-                Logan.info(
-                    f"Processing manual market {market}",
-                    namespace="trading"
-                )
-            else:
-                if not global_state.manual_markets_ready():
-                    global_state.manual_markets_ready(log_details=True)
-                    Logan.debug(
-                        f"Deferring auto market {market} until manual markets have resting orders",
-                        namespace="trading"
+                snapshot = await _refresh_market_snapshot(condition_id)
+                if snapshot:
+                    trade_size_override = row.get('trade_size')
+                    max_size_override = row.get('max_size')
+                    selection_source_override = row.get('selection_source')
+
+                    tracked_fields = (
+                        'max_spread',
+                        'reward_bid_floor',
+                        'reward_ask_ceiling',
+                        'reward_half_spread'
                     )
-                    return
+                    delta_messages = []
+                    for field in tracked_fields:
+                        if field in snapshot:
+                            previous = _safe_float(
+                                row.get(field), default=None)
+                            updated = _safe_float(
+                                snapshot.get(field), default=None)
+                            if previous is not None and updated is not None and abs(previous - updated) > 1e-6:
+                                delta_messages.append(
+                                    f"{field} {previous:.5f}->{updated:.5f}")
+
+                    for key, value in snapshot.items():
+                        if key in ('trade_size', 'max_size', 'selection_source'):
+                            continue
+                        row[key] = value
+
+                    if selection_source_override is not None:
+                        row['selection_source'] = selection_source_override
+                    if trade_size_override is not None:
+                        row['trade_size'] = trade_size_override
+                    if max_size_override is not None:
+                        row['max_size'] = max_size_override
+
+                    if delta_messages:
+                        Logan.info(
+                            f"Refreshed sheet data for market {condition_id}: {'; '.join(delta_messages)}",
+                            namespace="trading"
+                        )
 
             token_yes = str(row['token1'])
+
+            if selection_source != 'manual':
+                existing = get_order(token_yes)
+                has_orders = (
+                    existing.get('buy', {}).get('size', 0) > 0 or
+                    existing.get('sell', {}).get('size', 0) > 0
+                )
+                if has_orders:
+                    try:
+                        global_state.client.cancel_all_asset(token_yes)
+                    except Exception as exc:
+                        Logan.error(
+                            f"Error cancelling auto market orders for token {token_yes}",
+                            namespace="trading",
+                            exception=exc
+                        )
+                return
+
             if token_yes not in global_state.order_book_data:
                 Logan.warn(
                     f"No order book data yet for token {token_yes}",
@@ -311,53 +389,76 @@ async def perform_trade(market):
 
             row = _ensure_reward_defaults(row, best_bid, best_ask, tick)
 
-            midpoint = (best_bid + best_ask) / 2
-            bid_yes, ask_yes = _compute_yes_quotes(
-                midpoint, tick, tick_decimals, row)
-            if bid_yes is None or ask_yes is None:
-                Logan.warn(
-                    f"Failed to compute quotes for {market} (midpoint={midpoint:.4f}, tick={tick})",
-                    namespace="trading"
-                )
+            pending_exit = global_state.peek_pending_exit(condition_id)
+            if pending_exit is None and global_state.manual_recent_submission(condition_id, window_sec=2.0):
                 return
 
             trade_size = _determine_trade_size(row)
-            if trade_size <= 0:
-                return
-
             min_size = _safe_float(row.get('min_size'))
-            if min_size > 0 and trade_size < min_size:
-                trade_size = min_size
-
+            liquidity = _safe_float(global_state.available_liquidity)
             position_yes = _safe_float(get_position(token_yes)['size'])
             max_position = max(trade_size, _safe_float(
                 row.get('max_size'), trade_size))
-
-            liquidity = _safe_float(global_state.available_liquidity)
-
             remaining_capacity = max(max_position - position_yes, 0.0)
 
             desired_orders = {}
+            manual_state = global_state.get_manual_order_state(condition_id)
 
-            buy_size = 0.0
-            if liquidity > 0 and remaining_capacity > 0:
-                max_affordable = liquidity / max(bid_yes, tick)
-                buy_size = min(trade_size, max_affordable, remaining_capacity)
-                if min_size > 0 and buy_size < min_size:
-                    buy_size = 0.0
+            if pending_exit:
+                exit_side = str(pending_exit.get('side', '')).lower()
+                exit_price = float(pending_exit.get('price', 0.0))
+                exit_size = max(float(pending_exit.get('size', 0.0)), 0.0)
 
-            allow_buy = buy_size > 0
-            if allow_buy:
-                desired_orders['buy'] = (bid_yes, buy_size)
+                if exit_side == 'buy':
+                    if liquidity <= 0:
+                        global_state.set_manual_unserviceable(
+                            condition_id, f"exit buy blocked (liquidity={liquidity:.2f})")
+                        return
+                    if min_size > 0 and exit_size < min_size:
+                        exit_size = min_size
+                    desired_orders['buy'] = (exit_price, exit_size)
+                elif exit_side == 'sell':
+                    inventory = max(position_yes, 0.0)
+                    if inventory <= 0:
+                        global_state.set_manual_unserviceable(
+                            condition_id, "exit sell blocked (no inventory)")
+                        return
+                    desired_orders['sell'] = (
+                        exit_price, min(exit_size, inventory))
+                else:
+                    global_state.clear_pending_exit(condition_id)
+            else:
+                midpoint = (best_bid + best_ask) / 2
+                bid_yes, ask_yes = _compute_yes_quotes(
+                    midpoint, tick, tick_decimals, row)
+                if bid_yes is None or ask_yes is None:
+                    Logan.warn(
+                        f"Failed to compute quotes for {market} (midpoint={midpoint:.4f}, tick={tick})",
+                        namespace="trading"
+                    )
+                    return
 
-            sell_inventory = max(position_yes, 0.0)
-            sell_size = min(trade_size, sell_inventory)
-            if min_size > 0 and sell_size < min_size:
-                sell_size = 0.0
+                if trade_size <= 0:
+                    return
 
-            allow_sell = sell_size > 0
-            if allow_sell:
-                desired_orders['sell'] = (ask_yes, sell_size)
+                if min_size > 0 and trade_size < min_size:
+                    trade_size = min_size
+
+                if liquidity > 0 and remaining_capacity > 0:
+                    max_affordable = liquidity / max(bid_yes, tick)
+                    buy_size = min(trade_size, max_affordable,
+                                   remaining_capacity)
+                    if min_size > 0 and buy_size < min_size:
+                        buy_size = 0.0
+                    if buy_size > 0:
+                        desired_orders['buy'] = (bid_yes, buy_size)
+
+                sell_inventory = max(position_yes, 0.0)
+                sell_size = min(trade_size, sell_inventory)
+                if min_size > 0 and sell_size < min_size:
+                    sell_size = 0.0
+                if sell_size > 0:
+                    desired_orders['sell'] = (ask_yes, sell_size)
 
             if not desired_orders:
                 existing_orders_yes = get_order(token_yes)
@@ -374,30 +475,32 @@ async def perform_trade(market):
                             namespace="trading",
                             exception=exc
                         )
-                if selection_source == 'manual':
-                    skip_reason = None
-                    if liquidity <= 0:
-                        skip_reason = f"insufficient liquidity ({liquidity:.2f})"
-                    elif min_size > 0 and liquidity < min_size:
-                        skip_reason = f"min_size {min_size:.2f} exceeds available liquidity {liquidity:.2f}"
-                    elif trade_size <= 0:
-                        skip_reason = f"trade size is zero"
-                    elif remaining_capacity <= 0 and sell_size <= 0:
-                        skip_reason = f"no capacity (position={position_yes:.2f}, max={max_position:.2f})"
-                    elif sell_size <= 0 and position_yes <= 0:
-                        skip_reason = "no inventory to sell"
-                    else:
-                        skip_reason = "unable to build resting orders"
 
-                    global_state.set_manual_unserviceable(market, skip_reason)
-                    Logan.warn(
-                        f"Manual market {market} skipped: {skip_reason}",
-                        namespace="trading"
-                    )
+                skip_reason = "no liquidity"
+                if liquidity <= 0:
+                    skip_reason = f"insufficient liquidity ({liquidity:.2f})"
+                elif min_size > 0 and liquidity < min_size:
+                    skip_reason = f"min_size {min_size:.2f} exceeds available liquidity {liquidity:.2f}"
+                elif trade_size <= 0:
+                    skip_reason = "trade size is zero"
+                elif remaining_capacity <= 0:
+                    skip_reason = f"no capacity (position={position_yes:.2f}, max={max_position:.2f})"
+                elif position_yes <= 0:
+                    skip_reason = "no inventory to sell"
+
+                global_state.set_manual_unserviceable(
+                    condition_id, skip_reason)
+                global_state.record_manual_order_cancel(condition_id)
+                Logan.warn(
+                    f"Manual market {condition_id} skipped: {skip_reason}",
+                    namespace="trading"
+                )
                 return
 
-            if selection_source == 'manual':
-                global_state.clear_manual_unserviceable(market)
+            if _manual_orders_match(manual_state, desired_orders):
+                return
+
+            global_state.clear_manual_unserviceable(condition_id)
 
             existing_orders_yes = get_order(token_yes)
             if _orders_need_update(existing_orders_yes, desired_orders):
@@ -411,9 +514,10 @@ async def perform_trade(market):
                     )
                 else:
                     Logan.info(
-                        f"Resetting orders for {token_yes} (buy={allow_buy}, sell={allow_sell})",
+                        f"Resetting orders for {token_yes} (buy={'buy' in desired_orders}, sell={'sell' in desired_orders})",
                         namespace="trading"
                     )
+                    global_state.record_manual_order_cancel(condition_id)
 
                 is_neg_risk = str(row.get('neg_risk', '')).upper() == 'TRUE'
                 for side, (price, size) in desired_orders.items():
@@ -425,6 +529,8 @@ async def perform_trade(market):
                         'neg_risk': is_neg_risk
                     }
                     _submit_order(order, side.upper())
+
+                global_state.clear_pending_exit(condition_id)
 
             token_no = str(row['token2'])
             if token_no != token_yes:
