@@ -8,8 +8,11 @@ This module contains the logic for:
 These are currently stub implementations that can be filled in with custom logic.
 """
 
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 from dataclasses import dataclass
+import threading
+import time
+from copy import deepcopy
 
 import numpy as np
 import pandas as pd
@@ -27,6 +30,155 @@ class PositionSizeResult:
 
     trade_size: float
     max_size: float
+
+
+_market_snapshot_cache_lock = threading.Lock()
+_market_snapshot_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+
+
+def _normalize_snapshot_values(row_dict: Dict[str, Any]) -> Dict[str, Any]:
+    cleaned: Dict[str, Any] = {}
+    for key, value in row_dict.items():
+        if pd.isna(value):
+            cleaned[key] = None
+        elif isinstance(value, str):
+            cleaned[key] = value.strip()
+        else:
+            cleaned[key] = value
+
+    if 'condition_id' in cleaned:
+        cleaned['condition_id'] = str(cleaned['condition_id'])
+
+    return cleaned
+
+
+def _download_market_snapshot(condition_id: str) -> Optional[Dict[str, Any]]:
+    condition_id = str(condition_id)
+    if not condition_id:
+        return None
+
+    try:
+        spreadsheet = get_spreadsheet()
+    except FileNotFoundError:
+        try:
+            spreadsheet = get_spreadsheet(read_only=True)
+        except Exception as exc:
+            Logan.error(
+                f"Unable to open spreadsheet in read-only mode while refreshing market {condition_id}",
+                namespace="poly_data.market_selection",
+                exception=exc
+            )
+            return None
+    except Exception as exc:
+        Logan.error(
+            f"Failed to open spreadsheet while refreshing market {condition_id}",
+            namespace="poly_data.market_selection",
+            exception=exc
+        )
+        return None
+
+    try:
+        worksheet = spreadsheet.worksheet("All Markets")
+    except Exception as exc:
+        Logan.error(
+            f"Unable to access 'All Markets' sheet while refreshing market {condition_id}",
+            namespace="poly_data.market_selection",
+            exception=exc
+        )
+        return None
+
+    row_dict: Optional[Dict[str, Any]] = None
+
+    try:
+        finder = getattr(worksheet, "find", None)
+        row_values_method = getattr(worksheet, "row_values", None)
+        if callable(finder) and callable(row_values_method):
+            cell = finder(condition_id)
+            if cell:
+                header = row_values_method(1)
+                row_values = row_values_method(cell.row)
+                if header:
+                    if len(row_values) < len(header):
+                        row_values = row_values + \
+                            [''] * (len(header) - len(row_values))
+                    row_dict = dict(zip(header, row_values))
+                elif row_values:
+                    row_dict = {'condition_id': condition_id}
+    except Exception:
+        Logan.warn(
+            f"Direct row lookup failed for market {condition_id}, falling back to full sheet fetch",
+            namespace="poly_data.market_selection"
+        )
+
+    if row_dict is None:
+        try:
+            records = worksheet.get_all_records()
+        except Exception as exc:
+            Logan.error(
+                f"Failed to fetch sheet records while refreshing market {condition_id}",
+                namespace="poly_data.market_selection",
+                exception=exc
+            )
+            return None
+
+        if not records:
+            return None
+
+        try:
+            df = pd.DataFrame(records)
+        except Exception as exc:
+            Logan.error(
+                f"Failed to convert sheet records to DataFrame while refreshing market {condition_id}",
+                namespace="poly_data.market_selection",
+                exception=exc
+            )
+            return None
+
+        if 'condition_id' not in df.columns:
+            Logan.warn(
+                "Sheet snapshot missing 'condition_id' column",
+                namespace="poly_data.market_selection"
+            )
+            return None
+
+        df['condition_id'] = df['condition_id'].astype(str)
+        matches = df[df['condition_id'] == condition_id]
+        if matches.empty:
+            return None
+
+        row_dict = matches.iloc[0].to_dict()
+
+    if row_dict is None:
+        return None
+
+    row_dict['condition_id'] = condition_id
+    return _normalize_snapshot_values(row_dict)
+
+
+def get_latest_market_snapshot(condition_id: str, max_age: Optional[float] = None) -> Optional[Dict[str, Any]]:
+    """Fetch a fresh market snapshot from Google Sheets with optional caching."""
+
+    condition_id = str(condition_id)
+    if not condition_id:
+        return None
+
+    ttl = TCNF.MARKET_ROW_REFRESH_SECONDS if max_age is None else max_age
+    now = time.time()
+
+    if ttl and ttl > 0:
+        with _market_snapshot_cache_lock:
+            cached = _market_snapshot_cache.get(condition_id)
+            if cached and now - cached[0] <= ttl:
+                return deepcopy(cached[1])
+
+    snapshot = _download_market_snapshot(condition_id)
+    if snapshot is None:
+        return None
+
+    with _market_snapshot_cache_lock:
+        _market_snapshot_cache[condition_id] = (now, snapshot)
+
+    return deepcopy(snapshot)
 
 
 def filter_selected_markets(markets_df: pd.DataFrame) -> pd.DataFrame:
