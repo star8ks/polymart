@@ -33,9 +33,9 @@ class TradingConfig:
 
     # Liquidity reward focused parameters
     # Stay at least this many ticks inside the reward band boundaries
-    REWARD_EDGE_OFFSET_TICKS = 2
+    REWARD_EDGE_OFFSET_TICKS = 1
     # Additional ticks to shade quotes away from the top of book
-    REWARD_PASSIVE_OFFSET_TICKS = 2
+    REWARD_PASSIVE_OFFSET_TICKS = 1
     # Cap trade size to min_size * multiplier (multiplier >= 1)
     REWARD_TRADE_SIZE_MULTIPLIER = 1.0
     # Do not scale positions beyond this multiple of trade size
@@ -44,6 +44,10 @@ class TradingConfig:
     MIN_REWARD_PER_100_USD = 1.0
     # Refresh interval for per-market sheet snapshots before submitting orders (seconds)
     MARKET_ROW_REFRESH_SECONDS = 60
+    # Cooldown after an upstream cancellation before reattempting manual orders (seconds)
+    REMOTE_CANCEL_COOLDOWN_SECONDS = 300
+    # Time to wait before forcing a market exit after a fill (seconds)
+    FORCED_EXIT_DELAY_SECONDS = 60
 
     # Risk management thresholds
     MAX_VOLATILITY_SUM = 14.0

@@ -19,3 +19,4 @@ requests
 google-auth
 web3
 scipy
+git+https://github.com/merijjeyn/logan.git

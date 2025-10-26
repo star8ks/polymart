@@ -6,10 +6,11 @@ import poly_data.CONSTANTS as CONSTANTS
 from poly_data.orders_in_flight import clear_order_in_flight
 from poly_data.trading_utils import get_best_bid_ask_deets
 from trading import perform_trade
-import time 
+import time
 import asyncio
 from poly_data.data_utils import set_position, set_order, update_positions
 from logan import Logan
+
 
 def sync_order_book_data_for_reverse_token(updated_token: str):
     reverse_token = global_state.REVERSE_TOKENS[updated_token]
@@ -18,8 +19,11 @@ def sync_order_book_data_for_reverse_token(updated_token: str):
         'asks': SortedDict()
     }
 
-    global_state.order_book_data[reverse_token]['asks'].update({1 - price: size for price, size in global_state.order_book_data[updated_token]['bids'].items()})
-    global_state.order_book_data[reverse_token]['bids'].update({1 - price: size for price, size in global_state.order_book_data[updated_token]['asks'].items()})
+    global_state.order_book_data[reverse_token]['asks'].update(
+        {1 - price: size for price, size in global_state.order_book_data[updated_token]['bids'].items()})
+    global_state.order_book_data[reverse_token]['bids'].update(
+        {1 - price: size for price, size in global_state.order_book_data[updated_token]['asks'].items()})
+
 
 def process_book_data(token: str, json_data):
     global_state.order_book_data[token] = {
@@ -27,10 +31,13 @@ def process_book_data(token: str, json_data):
         'asks': SortedDict()
     }
 
-    global_state.order_book_data[token]['bids'].update({float(entry['price']): float(entry['size']) for entry in json_data['bids']})
-    global_state.order_book_data[token]['asks'].update({float(entry['price']): float(entry['size']) for entry in json_data['asks']})
+    global_state.order_book_data[token]['bids'].update(
+        {float(entry['price']): float(entry['size']) for entry in json_data['bids']})
+    global_state.order_book_data[token]['asks'].update(
+        {float(entry['price']): float(entry['size']) for entry in json_data['asks']})
 
     sync_order_book_data_for_reverse_token(token)
+
 
 def process_price_change(token: str, side, price_level, new_size):
     if side == 'bids':
@@ -43,15 +50,17 @@ def process_price_change(token: str, side, price_level, new_size):
             del book[price_level]
     else:
         book[price_level] = new_size
-    
+
     sync_order_book_data_for_reverse_token(token)
+
 
 def process_data(json_datas, trade=True):
     # Check if json_datas is a dict or a list of dicts
     if isinstance(json_datas, dict):
         json_datas = [json_datas]
     elif not isinstance(json_datas, list):
-        Logan.error(f"Expected dict or list of dicts, got: {type(json_datas)}", namespace="poly_data.data_processing")
+        Logan.error(
+            f"Expected dict or list of dicts, got: {type(json_datas)}", namespace="poly_data.data_processing")
         return
 
     for json_data in json_datas:
@@ -65,7 +74,7 @@ def process_data(json_datas, trade=True):
 
             if trade:
                 asyncio.create_task(perform_trade(market))
-                
+
         elif event_type == 'price_change':
             for data in json_data['price_changes']:
                 token = str(data['asset_id'])
@@ -77,16 +86,18 @@ def process_data(json_datas, trade=True):
                 if trade:
                     asyncio.create_task(perform_trade(market))
 
+
 def add_to_performing(col, id):
     if col not in global_state.performing:
         global_state.performing[col] = set()
-    
+
     if col not in global_state.performing_timestamps:
         global_state.performing_timestamps[col] = {}
 
     # Add the trade ID and track its timestamp
     global_state.performing[col].add(id)
     global_state.performing_timestamps[col][id] = time.time()
+
 
 def remove_from_performing(col, id):
     if col in global_state.performing:
@@ -95,20 +106,23 @@ def remove_from_performing(col, id):
     if col in global_state.performing_timestamps:
         global_state.performing_timestamps[col].pop(id, None)
 
+
 def process_user_data(rows):
     if isinstance(rows, dict):
         rows = [rows]
     elif not isinstance(rows, list):
-        Logan.error(f"Expected dict or list of dicts, got: {type(rows)}", namespace="poly_data.data_processing")
+        Logan.error(
+            f"Expected dict or list of dicts, got: {type(rows)}", namespace="poly_data.data_processing")
         return
 
     for row in rows:
         market = row['market']
+        market_str = str(market)
 
         side = row['side'].lower()
-        token = row['asset_id']
-            
-        if token in global_state.REVERSE_TOKENS:     
+        token = str(row['asset_id'])
+
+        if token in global_state.REVERSE_TOKENS:
             col = token + "_" + side
 
             if row['event_type'] == 'trade':
@@ -126,15 +140,19 @@ def process_user_data(rows):
                         )
                         size = float(maker_order['matched_amount'])
                         price = float(maker_order['price'])
-                        
+
                         is_user_maker = True
-                        maker_outcome = maker_order['outcome'] #this is curious
+                        # this is curious
+                        maker_outcome = maker_order['outcome']
 
                         if maker_outcome == taker_outcome:
-                            side = 'buy' if side == 'sell' else 'sell' #need to reverse as we reverse token too
+                            # need to reverse as we reverse token too
+                            side = 'buy' if side == 'sell' else 'sell'
                         else:
-                            token = global_state.REVERSE_TOKENS[token]
-                
+                            token = str(global_state.REVERSE_TOKENS[token])
+
+                col = f"{token}_{side}"
+
                 if not is_user_maker:
                     size = float(row['size'])
                     price = float(row['price'])
@@ -146,7 +164,7 @@ def process_user_data(rows):
                 Logan.info(
                     f"TRADE EVENT FOR: {row['market']}, ID: {row['id']}, STATUS: {row['status']}, SIDE: {row['side']}, MAKER OUTCOME: {maker_outcome}, TAKER OUTCOME: {taker_outcome}, PROCESSED SIDE: {side}, SIZE: {size}",
                     namespace="poly_data.data_processing"
-                ) 
+                )
 
                 if row['status'] == 'FAILED':
                     Logan.error(
@@ -183,21 +201,44 @@ def process_user_data(rows):
                     f"ORDER EVENT FOR: {row['market']}, STATUS: {row['status']}, TYPE: {row['type']}, SIDE: {side}, ORIGINAL SIZE: {row['original_size']}, SIZE MATCHED: {row['size_matched']}",
                     namespace="poly_data.data_processing"
                 )
-                
-                try: 
-                    order_size = global_state.orders[token][side]['size'] # size of existing orders
+
+                expected_cancel = global_state.consume_expected_cancellation(
+                    token)
+                manual_market = market_str in global_state.manual_condition_ids
+                schedule_trade = True
+                reason_text = row.get('reason') or row.get(
+                    'status_reason') or row.get('message') or row.get('error')
+
+                try:
+                    # size of existing orders
+                    order_size = global_state.orders[token][side]['size']
                 except Exception as e:
                     order_size = 0
 
                 if row['type'] == 'PLACEMENT':
                     order_size += float(row['original_size'])
-                elif row['type'] == 'UPDATE': 
+                elif row['type'] == 'UPDATE':
                     order_size -= float(row['size_matched'])
                 elif row['type'] == 'CANCELLATION':
                     order_size -= float(row['original_size'])
+                    if expected_cancel:
+                        pass
+                    elif manual_market:
+                        schedule_trade = False
+                        msg = reason_text or 'remote cancellation'
+                        global_state.set_manual_unserviceable(
+                            market_str, f"order cancelled upstream ({msg})")
+                        global_state.record_manual_order_cancel(market_str)
+                        Logan.warn(
+                            f"Manual market {market_str} cancellation originated upstream ({msg}); skipping re-place",
+                            namespace="poly_data.data_processing"
+                        )
+                    else:
+                        # ensure we do not accumulate stale expectations
+                        global_state.clear_expected_cancellation(token)
 
                 set_order(token, side, order_size, row['price'])
                 clear_order_in_flight(row['id'])
-                
-                asyncio.create_task(perform_trade(market))
 
+                if schedule_trade:
+                    asyncio.create_task(perform_trade(market))

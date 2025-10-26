@@ -23,6 +23,7 @@ manual_ready_last_details: Tuple[str, ...] = tuple()
 manual_unserviceable: Dict[str, str] = {}
 manual_order_state: Dict[str, 'ManualOrderState'] = {}
 manual_pending_exit: Dict[str, Dict[str, float]] = {}
+manual_unserviceable_since: Dict[str, float] = {}
 
 
 @dataclass
@@ -88,6 +89,11 @@ orders = {}
 # Format: {token_id: {'size': float, 'avgPrice': float}}
 positions = {}
 
+# Expected cancellation tracking (token -> expiry timestamp)
+# token -> (expiry timestamp, remaining expected cancellation events)
+expected_cancellations: Dict[str, Tuple[float, int]] = {}
+expected_cancellations_lock = threading.Lock()
+
 
 def _increment_token_version():
     global all_tokens_version
@@ -141,7 +147,7 @@ def register_market_tokens(token_yes: str, token_no: str, condition_id: Optional
 
 
 def set_selection_groups(manual_ids: Iterable[str], auto_ids: Iterable[str]):
-    global manual_condition_ids, auto_condition_ids, manual_unserviceable, manual_order_state, manual_pending_exit
+    global manual_condition_ids, auto_condition_ids, manual_unserviceable, manual_order_state, manual_pending_exit, manual_unserviceable_since
     manual_normalized = {str(cid) for cid in manual_ids if cid is not None}
     auto_normalized = {str(cid) for cid in auto_ids if cid is not None}
 
@@ -151,6 +157,11 @@ def set_selection_groups(manual_ids: Iterable[str], auto_ids: Iterable[str]):
         manual_unserviceable = {
             cid: reason
             for cid, reason in manual_unserviceable.items()
+            if cid in manual_condition_ids
+        }
+        manual_unserviceable_since = {
+            cid: ts
+            for cid, ts in manual_unserviceable_since.items()
             if cid in manual_condition_ids
         }
         manual_order_state = {
@@ -172,6 +183,7 @@ def set_manual_unserviceable(condition_id: str, reason: str):
 
     with selection_lock:
         manual_unserviceable[condition_id] = reason
+        manual_unserviceable_since[condition_id] = time.time()
 
     clear_manual_order_state(condition_id)
 
@@ -190,6 +202,7 @@ def clear_manual_unserviceable(condition_id: str):
     with selection_lock:
         if condition_id in manual_unserviceable:
             manual_unserviceable.pop(condition_id, None)
+            manual_unserviceable_since.pop(condition_id, None)
             removed = True
 
     if removed:
@@ -197,6 +210,29 @@ def clear_manual_unserviceable(condition_id: str):
             f"Manual market {condition_id} is now serviceable",
             namespace="poly_data.global_state"
         )
+
+
+def get_manual_unserviceable(condition_id: str) -> Optional[str]:
+    condition_id = str(condition_id)
+    if not condition_id:
+        return None
+
+    with selection_lock:
+        return manual_unserviceable.get(condition_id)
+
+
+def get_manual_unserviceable_age(condition_id: str) -> Optional[float]:
+    condition_id = str(condition_id)
+    if not condition_id:
+        return None
+
+    with selection_lock:
+        timestamp = manual_unserviceable_since.get(condition_id)
+
+    if timestamp is None:
+        return None
+
+    return max(time.time() - timestamp, 0.0)
 
 
 def manual_markets_ready(log_details: bool = False) -> bool:
@@ -391,3 +427,63 @@ def get_active_markets():
             combined_markets = markets_with_positions
 
     return combined_markets
+
+
+def mark_expected_cancellation(token: str, expected_events: int = 1, ttl: float = 5.0):
+    token = str(token)
+    if not token:
+        return
+
+    expiry = time.time() + max(ttl, 0.0)
+    remaining = max(int(expected_events), 1)
+    with expected_cancellations_lock:
+        expected_cancellations[token] = (expiry, remaining)
+
+
+def is_expected_cancellation(token: str) -> bool:
+    token = str(token)
+    if not token:
+        return False
+
+    now = time.time()
+    with expected_cancellations_lock:
+        entry = expected_cancellations.get(token)
+        if entry is None:
+            return False
+        expiry, _ = entry
+        if expiry < now:
+            expected_cancellations.pop(token, None)
+            return False
+        return True
+
+
+def clear_expected_cancellation(token: str):
+    token = str(token)
+    if not token:
+        return
+
+    with expected_cancellations_lock:
+        expected_cancellations.pop(token, None)
+
+
+def consume_expected_cancellation(token: str) -> bool:
+    token = str(token)
+    if not token:
+        return False
+
+    now = time.time()
+    with expected_cancellations_lock:
+        entry = expected_cancellations.get(token)
+        if entry is None:
+            return False
+
+        expiry, remaining = entry
+        if expiry < now:
+            expected_cancellations.pop(token, None)
+            return False
+
+        if remaining <= 1:
+            expected_cancellations.pop(token, None)
+        else:
+            expected_cancellations[token] = (expiry, remaining - 1)
+        return True

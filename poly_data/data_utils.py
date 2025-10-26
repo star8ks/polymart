@@ -228,10 +228,12 @@ def clear_all_orders():
             assets_to_cancel = set(all_orders['asset_id'].astype(str))
             for asset_id in assets_to_cancel:
                 try:
+                    global_state.mark_expected_cancellation(asset_id)
                     global_state.client.cancel_all_asset(asset_id)
                     Logan.info(
                         f"Cleared orders for asset {asset_id}", namespace="poly_data.data_utils")
                 except Exception as e:
+                    global_state.clear_expected_cancellation(asset_id)
                     Logan.error(
                         f"Error clearing orders for asset {asset_id}", namespace="poly_data.data_utils", exception=e)
         else:
@@ -270,9 +272,19 @@ def update_orders():
                             "Multiple orders found, cancelling",
                             namespace="poly_data.data_utils"
                         )
-                        global_state.client.cancel_all_asset(token)
-                        orders[str(token)] = {'buy': {'price': 0, 'size': 0}, 'sell': {
-                            'price': 0, 'size': 0}}
+                        global_state.mark_expected_cancellation(token)
+                        try:
+                            global_state.client.cancel_all_asset(token)
+                        except Exception as e:
+                            global_state.clear_expected_cancellation(token)
+                            Logan.error(
+                                f"Error cancelling duplicate orders for asset {token}",
+                                namespace="poly_data.data_utils",
+                                exception=e
+                            )
+                        else:
+                            orders[str(token)] = {'buy': {'price': 0, 'size': 0}, 'sell': {
+                                'price': 0, 'size': 0}}
                     elif len(curr) == 1:
                         orders[str(token)][type]['price'] = float(
                             curr.iloc[0]['price'])

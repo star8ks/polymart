@@ -10,6 +10,25 @@ import poly_data.global_state as global_state
 from configuration import MCNF
 
 
+class _RecvMessagesStub:
+    """Fallback object to satisfy websockets>=12 connection cleanup expectations."""
+
+    __slots__ = ()
+
+    def close(self):
+        """Mimic the close() method present on modern websockets queue objects."""
+        pass
+
+
+def _ensure_recv_messages_attr(connection):
+    """Provide a closeable recv_messages attribute when running against older websockets versions."""
+
+    if connection is None or hasattr(connection, "recv_messages"):
+        return
+
+    connection.recv_messages = _RecvMessagesStub()
+
+
 async def connect_market_websocket(chunk):
     """
     Connect to Polymarket's market WebSocket API and process market updates.
@@ -48,6 +67,7 @@ async def connect_market_websocket(chunk):
 
         try:
             async with websockets.connect(uri, ping_interval=MCNF.WEBSOCKET_PING_INTERVAL, ping_timeout=None) as websocket:
+                _ensure_recv_messages_attr(websocket)
                 subscription = {"assets_ids": tokens_ordered}
                 await websocket.send(json.dumps(subscription))
                 last_version = version
@@ -162,6 +182,7 @@ async def connect_user_websocket():
 
     while True:
         async with websockets.connect(uri, ping_interval=MCNF.WEBSOCKET_PING_INTERVAL, ping_timeout=None) as websocket:
+            _ensure_recv_messages_attr(websocket)
             # Prepare authentication message with API credentials
             message = {
                 "type": "user",

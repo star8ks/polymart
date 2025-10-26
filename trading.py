@@ -118,11 +118,23 @@ def _compute_yes_quotes(midpoint, tick, round_length, row):
     band_floor = min(band_floor, midpoint)
     band_ceiling = max(band_ceiling, midpoint)
 
-    if band_ceiling - band_floor <= 2 * tick:
+    if band_floor >= midpoint:
+        band_floor = max(midpoint - tick, tick)
+    if band_ceiling <= midpoint:
+        band_ceiling = min(midpoint + tick, 1 - tick)
+
+    if band_ceiling - band_floor <= tick:
+        fallback_half = max(max_spread_abs / 2, tick)
+        band_floor = max(midpoint - fallback_half, tick)
+        band_ceiling = min(midpoint + fallback_half, 1 - tick)
+        if band_ceiling - band_floor <= tick:
+            return None, None
+
+    if band_ceiling - band_floor < 2 * tick:
         return None, None
 
     half_width = min(midpoint - band_floor, band_ceiling - midpoint)
-    if half_width <= tick:
+    if half_width < tick:
         return None, None
 
     edge_offset = tick * \
@@ -262,6 +274,24 @@ async def _refresh_market_snapshot(condition_id: str):
     return await loop.run_in_executor(None, get_latest_market_snapshot, condition_id)
 
 
+def _count_active_sides(order_entry):
+    if not isinstance(order_entry, dict):
+        return 1
+
+    count = 0
+    buy = order_entry.get('buy') if isinstance(
+        order_entry.get('buy'), dict) else None
+    sell = order_entry.get('sell') if isinstance(
+        order_entry.get('sell'), dict) else None
+
+    if buy and _safe_float(buy.get('size')) > 0:
+        count += 1
+    if sell and _safe_float(sell.get('size')) > 0:
+        count += 1
+
+    return count if count > 0 else 1
+
+
 market_locks = {}
 
 
@@ -288,6 +318,18 @@ async def perform_trade(market):
             condition_id = str(market)
 
             if selection_source == 'manual':
+                unserviceable_reason = global_state.get_manual_unserviceable(
+                    condition_id)
+                if unserviceable_reason:
+                    reason_lower = str(unserviceable_reason).lower()
+                    cooldown = getattr(
+                        TCNF, 'REMOTE_CANCEL_COOLDOWN_SECONDS', 300)
+                    age = global_state.get_manual_unserviceable_age(
+                        condition_id)
+                    if 'order cancelled upstream' in reason_lower:
+                        if age is None or age < cooldown:
+                            return
+                        global_state.clear_manual_unserviceable(condition_id)
                 snapshot = await _refresh_market_snapshot(condition_id)
                 if snapshot:
                     trade_size_override = row.get('trade_size')
@@ -338,9 +380,13 @@ async def perform_trade(market):
                     existing.get('sell', {}).get('size', 0) > 0
                 )
                 if has_orders:
+                    expected_events = _count_active_sides(existing)
+                    global_state.mark_expected_cancellation(
+                        token_yes, expected_events)
                     try:
                         global_state.client.cancel_all_asset(token_yes)
                     except Exception as exc:
+                        global_state.clear_expected_cancellation(token_yes)
                         Logan.error(
                             f"Error cancelling auto market orders for token {token_yes}",
                             namespace="trading",
@@ -467,9 +513,13 @@ async def perform_trade(market):
                     existing_orders_yes.get('sell', {}).get('size', 0) > 0
                 )
                 if has_existing:
+                    expected_events = _count_active_sides(existing_orders_yes)
+                    global_state.mark_expected_cancellation(
+                        token_yes, expected_events)
                     try:
                         global_state.client.cancel_all_asset(token_yes)
                     except Exception as exc:
+                        global_state.clear_expected_cancellation(token_yes)
                         Logan.error(
                             f"Error cancelling existing orders for token {token_yes}",
                             namespace="trading",
@@ -504,9 +554,13 @@ async def perform_trade(market):
 
             existing_orders_yes = get_order(token_yes)
             if _orders_need_update(existing_orders_yes, desired_orders):
+                expected_events = _count_active_sides(existing_orders_yes)
+                global_state.mark_expected_cancellation(
+                    token_yes, expected_events)
                 try:
                     global_state.client.cancel_all_asset(token_yes)
                 except Exception as exc:
+                    global_state.clear_expected_cancellation(token_yes)
                     Logan.error(
                         f"Error cancelling existing orders for token {token_yes}",
                         namespace="trading",
@@ -536,9 +590,13 @@ async def perform_trade(market):
             if token_no != token_yes:
                 existing_orders_no = get_order(token_no)
                 if existing_orders_no['buy']['size'] > 0 or existing_orders_no['sell']['size'] > 0:
+                    expected_events = _count_active_sides(existing_orders_no)
+                    global_state.mark_expected_cancellation(
+                        token_no, expected_events)
                     try:
                         global_state.client.cancel_all_asset(token_no)
                     except Exception as exc:
+                        global_state.clear_expected_cancellation(token_no)
                         Logan.error(
                             f"Error cancelling legacy orders for token {token_no}",
                             namespace="trading",
