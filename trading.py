@@ -10,6 +10,7 @@ from poly_data.orders_in_flight import get_orders_in_flight, set_order_in_flight
 from poly_data.trading_utils import get_best_bid_ask_deets, round_down, round_up
 from poly_data.data_utils import get_position, get_order
 from poly_data.market_selection import get_enhanced_market_row, get_latest_market_snapshot
+from poly_data.CONSTANTS import _POSITION_EPS
 
 
 def _safe_float(value, default=0.0):
@@ -496,7 +497,7 @@ async def perform_trade(market):
                                    remaining_capacity)
                     if min_size > 0 and buy_size < min_size:
                         buy_size = 0.0
-                    if buy_size > 0:
+                    if buy_size > 0 and position_yes <= _POSITION_EPS:
                         desired_orders['buy'] = (bid_yes, buy_size)
 
                 sell_inventory = max(position_yes, 0.0)

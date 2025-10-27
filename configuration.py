@@ -33,9 +33,9 @@ class TradingConfig:
 
     # Liquidity reward focused parameters
     # Stay at least this many ticks inside the reward band boundaries
-    REWARD_EDGE_OFFSET_TICKS = 1
+    REWARD_EDGE_OFFSET_TICKS = 2
     # Additional ticks to shade quotes away from the top of book
-    REWARD_PASSIVE_OFFSET_TICKS = 1
+    REWARD_PASSIVE_OFFSET_TICKS = 2
     # Cap trade size to min_size * multiplier (multiplier >= 1)
     REWARD_TRADE_SIZE_MULTIPLIER = 1.0
     # Do not scale positions beyond this multiple of trade size

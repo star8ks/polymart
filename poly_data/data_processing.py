@@ -1,15 +1,227 @@
 import json
+import math
+from typing import Optional
 from sortedcontainers import SortedDict
 import poly_data.global_state as global_state
-import poly_data.CONSTANTS as CONSTANTS
+from poly_data.CONSTANTS import _POSITION_EPS
 
 from poly_data.orders_in_flight import clear_order_in_flight
 from poly_data.trading_utils import get_best_bid_ask_deets
 from trading import perform_trade
 import time
 import asyncio
-from poly_data.data_utils import set_position, set_order, update_positions
+from poly_data.data_utils import set_position, set_order, update_positions, get_order
+from configuration import TCNF
 from logan import Logan
+
+
+def _safe_float(value, default=0.0):
+    try:
+        result = float(value)
+        if math.isnan(result):
+            return default
+        return result
+    except (TypeError, ValueError):
+        return default
+
+
+def _get_market_row(condition_id: str):
+    markets = global_state.get_active_markets()
+    if markets is None or len(markets) == 0:
+        return None
+
+    try:
+        matches = markets[markets['condition_id'].astype(
+            str) == str(condition_id)]
+    except Exception:
+        return None
+
+    if len(matches) == 0:
+        return None
+
+    return matches.iloc[0]
+
+
+def _determine_exit_price(token: str, market_row) -> Optional[float]:
+    token_str = str(token)
+    tick = _safe_float(getattr(market_row, 'tick_size', None) if hasattr(
+        market_row, 'tick_size') else market_row.get('tick_size', None), 0.01)
+
+    order_data = global_state.order_book_data.get(token_str)
+    best_bid = None
+    if isinstance(order_data, dict):
+        bids = order_data.get('bids')
+        if bids:
+            try:
+                best_bid = next(reversed(bids))
+            except StopIteration:
+                best_bid = None
+
+    if best_bid is not None:
+        best_bid = _safe_float(best_bid, None)
+
+    if best_bid is None:
+        try:
+            book = get_best_bid_ask_deets(token_str, 1)
+            raw_bid = book.get('best_bid') if book.get(
+                'best_bid') is not None else book.get('top_bid')
+            best_bid = _safe_float(raw_bid, None)
+        except Exception:
+            best_bid = None
+
+    if best_bid is None and market_row is not None:
+        source = getattr(market_row, 'best_bid', None)
+        if source is None and isinstance(market_row, dict):
+            source = market_row.get('best_bid')
+        best_bid = _safe_float(source, None)
+
+    if best_bid is None or best_bid <= 0:
+        return None
+
+    return max(tick, min(best_bid, 1 - tick))
+
+
+def _count_active_sides(order_entry):
+    if not isinstance(order_entry, dict):
+        return 1
+
+    count = 0
+    buy = order_entry.get('buy') if isinstance(
+        order_entry.get('buy'), dict) else None
+    sell = order_entry.get('sell') if isinstance(
+        order_entry.get('sell'), dict) else None
+
+    if buy and _safe_float(buy.get('size')) > 0:
+        count += 1
+    if sell and _safe_float(sell.get('size')) > 0:
+        count += 1
+
+    return count if count > 0 else 1
+
+
+async def _force_exit_after_delay(condition_id: str, token: str):
+    delay = max(getattr(TCNF, 'FORCED_EXIT_DELAY_SECONDS', 300), 0)
+    if delay <= 0:
+        global_state.complete_forced_exit_task(
+            condition_id, asyncio.current_task())
+        return
+
+    try:
+        await asyncio.sleep(delay)
+
+        token_str = str(token)
+        position_entry = global_state.positions.get(token_str, {})
+        remaining = _safe_float(position_entry.get('size'))
+        if remaining <= _POSITION_EPS:
+            return
+
+        market_row = _get_market_row(condition_id)
+        price = _determine_exit_price(token_str, market_row)
+        tick = _safe_float(getattr(market_row, 'tick_size', None) if market_row is not None and hasattr(
+            market_row, 'tick_size') else (market_row.get('tick_size') if isinstance(market_row, dict) else None), 0.01)
+        if price is None or price <= 0:
+            price = max(tick, 0.01)
+
+        existing_orders = get_order(token_str)
+        global_state.mark_expected_cancellation(
+            token_str, _count_active_sides(existing_orders))
+        try:
+            global_state.client.cancel_all_asset(token_str)
+        except Exception as exc:
+            global_state.clear_expected_cancellation(token_str)
+            Logan.error(
+                f"Error cancelling orders before forced exit for token {token_str}",
+                namespace="poly_data.data_processing",
+                exception=exc
+            )
+
+        is_neg_risk = False
+        if market_row is not None:
+            source = getattr(market_row, 'neg_risk', None) if hasattr(
+                market_row, 'neg_risk') else market_row.get('neg_risk') if isinstance(market_row, dict) else None
+            is_neg_risk = str(source).upper() == 'TRUE'
+
+        try:
+            global_state.client.create_order(
+                token_str,
+                'SELL',
+                price,
+                remaining,
+                is_neg_risk
+            )
+            Logan.warn(
+                f"Forced exit submitted for market {condition_id}: sell {remaining:.2f} @ {price:.3f}",
+                namespace="poly_data.data_processing"
+            )
+        except Exception as exc:
+            Logan.error(
+                f"Failed to execute forced exit for market {condition_id}",
+                namespace="poly_data.data_processing",
+                exception=exc
+            )
+    except asyncio.CancelledError:
+        raise
+    finally:
+        global_state.complete_forced_exit_task(
+            condition_id, asyncio.current_task())
+
+
+def _initiate_exit_orders(condition_id: str, token: str, new_size: float):
+    condition_id = str(condition_id)
+    token_str = str(token)
+    size = _safe_float(new_size)
+    if size <= _POSITION_EPS:
+        return
+
+    market_row = _get_market_row(condition_id)
+    if market_row is None:
+        Logan.warn(
+            f"Unable to locate market row for forced exit scheduling {condition_id}",
+            namespace="poly_data.data_processing"
+        )
+        return
+
+    price = _determine_exit_price(token_str, market_row)
+    tick = _safe_float(getattr(market_row, 'tick_size', None) if hasattr(
+        market_row, 'tick_size') else market_row.get('tick_size', None), 0.01)
+    if price is None or price <= 0:
+        price = max(tick, 0.01)
+
+    global_state.set_pending_exit(condition_id, 'sell', price, size)
+    Logan.info(
+        f"Scheduled exit order for market {condition_id}: sell {size:.2f} @ {price:.3f}",
+        namespace="poly_data.data_processing"
+    )
+
+    cooldown = max(getattr(TCNF, 'FORCED_EXIT_DELAY_SECONDS', 300), 0)
+    if cooldown <= 0:
+        return
+
+    global_state.cancel_forced_exit_task(condition_id)
+    forced_task = asyncio.create_task(
+        _force_exit_after_delay(condition_id, token_str))
+    global_state.register_forced_exit_task(condition_id, forced_task)
+
+
+def _handle_position_update(condition_id: str, token: str, previous_size: float, new_size: float):
+    try:
+        prev = _safe_float(previous_size)
+        current = _safe_float(new_size)
+
+        if current <= _POSITION_EPS:
+            if prev > _POSITION_EPS:
+                global_state.cancel_forced_exit_task(condition_id)
+                global_state.clear_pending_exit(condition_id)
+            return
+
+        if current > prev + _POSITION_EPS:
+            _initiate_exit_orders(condition_id, token, current)
+    except Exception as exc:
+        Logan.error(
+            f"Error handling position update for market {condition_id}",
+            namespace="poly_data.data_processing",
+            exception=exc
+        )
 
 
 def sync_order_book_data_for_reverse_token(updated_token: str):
@@ -161,6 +373,9 @@ def process_user_data(rows):
                         namespace="poly_data.data_processing"
                     )
 
+                prev_entry = global_state.positions.get(token, {})
+                prev_size = _safe_float(prev_entry.get('size'))
+
                 Logan.info(
                     f"TRADE EVENT FOR: {row['market']}, ID: {row['id']}, STATUS: {row['status']}, SIDE: {row['side']}, MAKER OUTCOME: {maker_outcome}, TAKER OUTCOME: {taker_outcome}, PROCESSED SIDE: {side}, SIZE: {size}",
                     namespace="poly_data.data_processing"
@@ -192,6 +407,10 @@ def process_user_data(rows):
                         f"Position after matching is {global_state.positions[str(token)]}",
                         namespace="poly_data.data_processing"
                     )
+                    new_size = _safe_float(
+                        global_state.positions.get(str(token), {}).get('size'))
+                    _handle_position_update(
+                        market_str, token, prev_size, new_size)
                     asyncio.create_task(perform_trade(market))
                 elif row['status'] == 'MINED':
                     remove_from_performing(col, row['id'])

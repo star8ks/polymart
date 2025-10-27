@@ -3,6 +3,7 @@ import time
 from dataclasses import dataclass
 import pandas as pd
 from typing import Dict, Optional, Tuple, Iterable
+import asyncio
 from logan import Logan
 # ============ Market Data ============
 
@@ -24,6 +25,10 @@ manual_unserviceable: Dict[str, str] = {}
 manual_order_state: Dict[str, 'ManualOrderState'] = {}
 manual_pending_exit: Dict[str, Dict[str, float]] = {}
 manual_unserviceable_since: Dict[str, float] = {}
+
+# Forced exit task tracking (condition_id -> asyncio.Task)
+forced_exit_tasks: Dict[str, asyncio.Task] = {}
+forced_exit_lock = threading.Lock()
 
 
 @dataclass
@@ -147,7 +152,7 @@ def register_market_tokens(token_yes: str, token_no: str, condition_id: Optional
 
 
 def set_selection_groups(manual_ids: Iterable[str], auto_ids: Iterable[str]):
-    global manual_condition_ids, auto_condition_ids, manual_unserviceable, manual_order_state, manual_pending_exit, manual_unserviceable_since
+    global manual_condition_ids, auto_condition_ids, manual_unserviceable, manual_order_state, manual_pending_exit, manual_unserviceable_since, forced_exit_tasks
     manual_normalized = {str(cid) for cid in manual_ids if cid is not None}
     auto_normalized = {str(cid) for cid in auto_ids if cid is not None}
 
@@ -164,6 +169,13 @@ def set_selection_groups(manual_ids: Iterable[str], auto_ids: Iterable[str]):
             for cid, ts in manual_unserviceable_since.items()
             if cid in manual_condition_ids
         }
+        # Drop forced exit tasks for markets no longer tracked manually
+        stale_tasks = [cid for cid in forced_exit_tasks.keys()
+                       if cid not in manual_condition_ids]
+        for cid in stale_tasks:
+            task = forced_exit_tasks.pop(cid, None)
+            if task is not None and not task.done():
+                task.cancel()
         manual_order_state = {
             cid: state
             for cid, state in manual_order_state.items()
@@ -233,6 +245,43 @@ def get_manual_unserviceable_age(condition_id: str) -> Optional[float]:
         return None
 
     return max(time.time() - timestamp, 0.0)
+
+
+def register_forced_exit_task(condition_id: str, task: asyncio.Task):
+    condition_id = str(condition_id)
+    if not condition_id or task is None:
+        return
+
+    with forced_exit_lock:
+        existing = forced_exit_tasks.get(condition_id)
+        if existing is not None and not existing.done():
+            existing.cancel()
+        forced_exit_tasks[condition_id] = task
+
+
+def cancel_forced_exit_task(condition_id: str):
+    condition_id = str(condition_id)
+    if not condition_id:
+        return
+
+    with forced_exit_lock:
+        task = forced_exit_tasks.pop(condition_id, None)
+
+    if task is not None and not task.done():
+        task.cancel()
+
+
+def complete_forced_exit_task(condition_id: str, task: Optional[asyncio.Task]):
+    condition_id = str(condition_id)
+    if not condition_id:
+        return
+
+    with forced_exit_lock:
+        existing = forced_exit_tasks.get(condition_id)
+        if existing is None:
+            return
+        if task is None or existing is task:
+            forced_exit_tasks.pop(condition_id, None)
 
 
 def manual_markets_ready(log_details: bool = False) -> bool:
